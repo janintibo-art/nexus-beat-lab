@@ -118,7 +118,13 @@
   .slice.playing{filter:brightness(1.6) saturate(1.3);box-shadow:0 0 12px var(--pc);}
   .slice.off{background:#26262e!important;color:#5c5c68;border-top-color:rgba(255,255,255,.08);}
 
-  /* ---------- mixeur ---------- */
+  /* ---------- mixeur & FX ---------- */
+  #botrow{display:flex;gap:10px;}
+  #fxpanel{width:390px;}
+  #fxbtns{display:flex;gap:8px;padding:6px 14px 4px;}
+  #fxknobs{display:flex;gap:14px;padding:8px 14px 4px;}
+  #fxhint{font-size:10px;color:var(--dim);padding:2px 14px 12px;line-height:1.4;}
+  #kitrow .knob{width:60px;}
   #mixer{display:flex;gap:18px;padding:12px 18px 16px;align-items:flex-end;}
   .chan{display:flex;flex-direction:column;align-items:center;gap:7px;}
   .chan label{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--dim);}
@@ -177,6 +183,7 @@
       <button class="btn" id="kitPrev">&#9664;</button>
       <div class="cell" style="flex:1;text-align:center"><label>KIT</label><div id="kitName" style="font-weight:800;font-size:14px;color:var(--orange)">808 CLASSIC</div></div>
       <button class="btn" id="kitNext">&#9654;</button>
+      <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="pitchKnob"></div><label>PITCH</label><div class="kv" id="pitchVal">0</div></div>
     </div>
     <div id="padgrid"></div>
     <div id="banks">
@@ -212,10 +219,26 @@
       <div id="seqgrid"></div>
     </div>
 
-    <!-- ====== MIXEUR ====== -->
-    <div class="panel">
-      <div class="ptitle">MIXEUR</div>
-      <div id="mixer"></div>
+    <!-- ====== MIXEUR + FX ====== -->
+    <div id="botrow">
+      <div class="panel" style="flex:1">
+        <div class="ptitle">MIXEUR</div>
+        <div id="mixer"></div>
+      </div>
+      <div class="panel" id="fxpanel">
+        <div class="ptitle">FX MASTER</div>
+        <div id="fxbtns">
+          <button class="btn red" id="fxDist">&#9889; DISTORT</button>
+          <button class="btn green" id="fxDelay">&#128337; DELAY</button>
+          <button class="btn" id="fxRev">&#127756; REVERB</button>
+        </div>
+        <div id="fxknobs">
+          <div class="knob" style="--kc:var(--red)"><div class="kbody" id="driveKnob"></div><label>DRIVE</label><div class="kv" id="driveVal">30</div></div>
+          <div class="knob" style="--kc:var(--green)"><div class="kbody" id="dlyKnob"></div><label>DELAY MIX</label><div class="kv" id="dlyVal">35</div></div>
+          <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="revKnob"></div><label>REVERB</label><div class="kv" id="revVal">30</div></div>
+        </div>
+        <p id="fxhint">Delay synchronis&eacute; au BPM (croche point&eacute;e). DISTORT + DRIVE &agrave; fond = son uptempo &#128293;</p>
+      </div>
     </div>
   </div>
 </div>
@@ -241,9 +264,42 @@
    Audio : Web Audio API (sons 100% synthétisés, aucun fichier)
    ========================================================= */
 const AC = new (window.AudioContext||window.webkitAudioContext)();
-const master = AC.createGain(); master.gain.value = 0.8;
+/* chaîne : sources → master(bus) → distorsion → [delay + reverb] → outGain → analyseur → sortie */
+const master = AC.createGain(); master.gain.value = 1.0;
+const shaper = AC.createWaveShaper(); shaper.oversample = '4x';
+const postFx = AC.createGain();
+const outGain = AC.createGain(); outGain.gain.value = 0.8;
 const analyser = AC.createAnalyser(); analyser.fftSize = 256;
-master.connect(analyser); analyser.connect(AC.destination);
+function distCurve(a){ const n=1024, c=new Float32Array(n);
+  for(let i=0;i<n;i++){ const x=i/(n-1)*2-1; c[i]=Math.tanh(x*a)/Math.tanh(a); } return c; }
+const LINEAR = distCurve(0.0001);
+shaper.curve = LINEAR;
+master.connect(shaper); shaper.connect(postFx);
+postFx.connect(outGain);
+/* delay synchronisé (croche pointée) */
+const delay = AC.createDelay(2);
+const dFilt = AC.createBiquadFilter(); dFilt.type='lowpass'; dFilt.frequency.value=4500;
+const dFb = AC.createGain(); dFb.gain.value = 0.42;
+const dWet = AC.createGain(); dWet.gain.value = 0;
+postFx.connect(delay); delay.connect(dFilt); dFilt.connect(dFb); dFb.connect(delay);
+dFilt.connect(dWet); dWet.connect(outGain);
+delay.delayTime.value = 60/128*0.75;
+/* reverb (réponse impulsionnelle générée) */
+const conv = AC.createConvolver();
+(function(){ const len=Math.floor(AC.sampleRate*1.8), b=AC.createBuffer(2,len,AC.sampleRate);
+  for(let ch=0;ch<2;ch++){ const d=b.getChannelData(ch);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.6); }
+  conv.buffer=b; })();
+const rWet = AC.createGain(); rWet.gain.value = 0;
+postFx.connect(conv); conv.connect(rWet); rWet.connect(outGain);
+outGain.connect(analyser); analyser.connect(AC.destination);
+/* état des effets */
+const fx = { dist:false, drive:0.3, dly:false, dlyMix:0.35, rev:false, revMix:0.3 };
+function applyFx(){
+  shaper.curve = fx.dist ? distCurve(1+fx.drive*24) : LINEAR;
+  dWet.gain.value = fx.dly ? fx.dlyMix*0.9 : 0;
+  rWet.gain.value = fx.rev ? fx.revMix*0.8 : 0;
+}
 
 /* ---------- bruit blanc partagé ---------- */
 const noiseBuf = (()=>{ const b=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);
@@ -364,9 +420,11 @@ async function loadKit(i){
        : ok>0   ? 'Kit "'+k.name+'" partiel ('+ok+'/16)'
                 : 'Samples introuvables \u2014 sons synth\u00e9 utilis\u00e9s');
 }
-function playSound(name,t,out){
+function playSound(name,t,out,rate){
   const b=kitBuf[name];
-  if(b){ const s=AC.createBufferSource(); s.buffer=b; s.connect(out); s.start(t); }
+  if(b){ const s=AC.createBufferSource(); s.buffer=b;
+    if(rate&&rate!==1) s.playbackRate.value=rate;
+    s.connect(out); s.start(t); }
   else if(SOUNDS[name]) SOUNDS[name](t,out);
 }
 document.getElementById('kitPrev').addEventListener('click',()=>{ resume(); loadKit(kitIdx-1); });
@@ -378,10 +436,11 @@ const SLICE_COLORS=['#ff9a2e','#ff9a2e','#ff9a2e','#ff9a2e','#ff2e88','#ff2e88',
                     '#a04dff','#a04dff','#a04dff','#a04dff','#2ee6ff','#2ee6ff','#2ee6ff','#2ee6ff'];
 const waveCv=document.getElementById('wave'), wctx=waveCv.getContext('2d');
 const slicesEl=document.getElementById('slices');
-function playSlice(i,t){ if(!sampleBuf) return; t=t||AC.currentTime; resume();
+function playSlice(i,t,rate){ if(!sampleBuf) return; t=t||AC.currentTime; rate=rate||1; resume();
   const s=AC.createBufferSource(); s.buffer=sampleBuf;
+  if(rate!==1) s.playbackRate.value=rate;
   const g=AC.createGain(); g.gain.value=0.9; s.connect(g).connect(master);
-  const dur=sampleBuf.duration/16; s.start(t,i*dur,dur);
+  const dur=sampleBuf.duration/16; s.start(t,i*dur); s.stop(t+dur/rate);
   const el=slicesEl.children[i];
   if(el){ el.classList.add('playing'); setTimeout(()=>el.classList.remove('playing'),Math.min(400,dur*1000)); } }
 function buildSlices(){
@@ -439,7 +498,8 @@ function buildPads(){
     d.style.background=`linear-gradient(160deg, color-mix(in srgb,${col} 85%, #fff), color-mix(in srgb,${col} 65%, #000))`;
     d.innerHTML=`<span>${label}</span><span class="n">${i+1}</span>`;
     d.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
-      if(isA) playSound(PADS[i][1],AC.currentTime,master); else playSlice(i);
+      const rate=Math.pow(2,padSemi/12);
+      if(isA) playSound(PADS[i][1],AC.currentTime,master,rate); else playSlice(i,0,rate);
       d.classList.add('hit'); setTimeout(()=>d.classList.remove('hit'),120); });
     padgrid.appendChild(d);
   }
@@ -515,7 +575,8 @@ document.getElementById('clearBtn').addEventListener('click',()=>{ pattern=TRACK
 
 /* ---------- BPM : glisser + TAP ---------- */
 const bpmVal=document.getElementById('bpmVal');
-function setBpm(v){ bpm=Math.min(220,Math.max(50,v)); bpmVal.textContent=bpm.toFixed(1); }
+function setBpm(v){ bpm=Math.min(220,Math.max(50,v)); bpmVal.textContent=bpm.toFixed(1);
+  delay.delayTime.value=60/bpm*0.75; }
 (function(){ let y0=0,b0=0;
   bpmVal.addEventListener('pointerdown',e=>{ y0=e.clientY;b0=bpm; bpmVal.setPointerCapture(e.pointerId); });
   bpmVal.addEventListener('pointermove',e=>{ if(e.buttons) setBpm(b0+(y0-e.clientY)*0.25); });
@@ -538,9 +599,25 @@ function makeKnob(el,valEl,init,onChange,fmt){
   render();
 }
 makeKnob(document.getElementById('masterKnob'),document.getElementById('masterVal'),
-  0.8,v=>master.gain.value=v,v=>Math.round(v*100));
+  0.8,v=>outGain.gain.value=v,v=>Math.round(v*100));
 makeKnob(document.getElementById('swingKnob'),document.getElementById('swingVal'),
   0,v=>swing=v,v=>Math.round(v*100)+'%');
+makeKnob(document.getElementById('driveKnob'),document.getElementById('driveVal'),
+  0.3,v=>{fx.drive=v;applyFx();},v=>Math.round(v*100));
+makeKnob(document.getElementById('dlyKnob'),document.getElementById('dlyVal'),
+  0.35,v=>{fx.dlyMix=v;applyFx();},v=>Math.round(v*100));
+makeKnob(document.getElementById('revKnob'),document.getElementById('revVal'),
+  0.3,v=>{fx.revMix=v;applyFx();},v=>Math.round(v*100));
+let padSemi=0;
+makeKnob(document.getElementById('pitchKnob'),document.getElementById('pitchVal'),
+  0.5,v=>{padSemi=Math.round(v*24-12);},v=>{const s=Math.round(v*24-12);return (s>0?'+':'')+s;});
+
+/* ---------- boutons on/off des effets ---------- */
+[['fxDist','dist'],['fxDelay','dly'],['fxRev','rev']].forEach(([id,key])=>{
+  const b=document.getElementById(id);
+  b.addEventListener('click',()=>{ resume(); fx[key]=!fx[key];
+    b.classList.toggle('on',fx[key]); applyFx(); });
+});
 
 /* ---------- mixeur ---------- */
 const mixer=document.getElementById('mixer');
