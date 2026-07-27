@@ -170,6 +170,7 @@
   <div id="songTitle">RETROFUNK VIBES</div>
   <button class="btn green" id="playBtn">&#9654; PLAY</button>
   <button class="btn" id="stopBtn">&#9632; STOP</button>
+  <button class="btn red" id="recBtn">&#9679; REC</button>
   <div id="vu"><div class="vurow" id="vuL"></div><div class="vurow" id="vuR"></div></div>
   <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="masterKnob"></div><label>MASTER</label><div class="kv" id="masterVal">80</div></div>
   <button class="btn" id="menuBtn">&#9776;</button>
@@ -499,7 +500,8 @@ function buildPads(){
     d.innerHTML=`<span>${label}</span><span class="n">${i+1}</span>`;
     d.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
       const rate=Math.pow(2,padSemi/12);
-      if(isA) playSound(PADS[i][1],AC.currentTime,master,rate); else playSlice(i,0,rate);
+      if(isA){ playSound(PADS[i][1],AC.currentTime,master,rate); recordHit(PADS[i][1]); }
+      else playSlice(i,0,rate);
       d.classList.add('hit'); setTimeout(()=>d.classList.remove('hit'),120); });
     padgrid.appendChild(d);
   }
@@ -543,7 +545,7 @@ function buildGrid(){
 }
 
 /* ---------- horloge / lecture ---------- */
-let bpm=128, swing=0, playing=false, step=0, nextTime=0, timer=null;
+let bpm=128, swing=0, playing=false, step=0, nextTime=0, timer=null, playStart=0;
 const LOOKAHEAD=25, AHEAD=0.12;
 function stepDur(){ return 60/bpm/4; }
 function scheduler(){
@@ -562,6 +564,7 @@ function highlight(s){
   });
 }
 function play(){ resume(); if(playing) return; playing=true; step=0; nextTime=AC.currentTime+0.06;
+  playStart=nextTime;
   timer=setInterval(scheduler,LOOKAHEAD); playBtn.classList.add('on'); }
 function stop(){ playing=false; clearInterval(timer);
   playBtn.classList.remove('on');
@@ -572,6 +575,24 @@ const playBtn=document.getElementById('playBtn');
 playBtn.addEventListener('click',()=>playing?stop():play());
 document.getElementById('stopBtn').addEventListener('click',stop);
 document.getElementById('clearBtn').addEventListener('click',()=>{ pattern=TRACKS.map(()=>Array(16).fill(false)); buildGrid(); });
+
+/* ---------- enregistrement live (REC) ---------- */
+let recording=false;
+const REC_MAP={kick:0,snare:1,clap:2,hat:3,bass:4,perc1:5}; // pad → piste du séquenceur
+const recBtn=document.getElementById('recBtn');
+recBtn.addEventListener('click',()=>{
+  recording=!recording; recBtn.classList.toggle('on',recording);
+  if(recording){ toast(playing ? 'REC : jouez les pads, les frappes s\u2019inscrivent dans la grille'
+                              : 'REC arm\u00e9 : appuyez sur PLAY puis jouez les pads');
+    if(!playing) play(); }
+});
+function recordHit(soundName){
+  if(!recording||!playing) return;
+  const ti=REC_MAP[soundName]; if(ti===undefined) return;
+  const idx=((Math.round((AC.currentTime-playStart)/stepDur()))%16+16)%16;
+  if(!pattern[ti][idx]){ pattern[ti][idx]=true;
+    const el=stepEls[ti]&&stepEls[ti][idx]; if(el) el.classList.add('on'); }
+}
 
 /* ---------- BPM : glisser + TAP ---------- */
 const bpmVal=document.getElementById('bpmVal');
