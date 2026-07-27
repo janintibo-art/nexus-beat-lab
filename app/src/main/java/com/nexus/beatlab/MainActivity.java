@@ -40,6 +40,9 @@ public class MainActivity extends Activity {
         s.setUseWideViewPort(true);
         s.setLoadWithOverviewMode(true);
         s.setAllowFileAccess(true);
+        // Autoriser la lecture des samples WAV embarqués (XHR sur file://)
+        s.setAllowFileAccessFromFileURLs(true);
+        s.setAllowUniversalAccessFromFileURLs(true);
 
         // Sélecteur de fichiers pour charger des samples audio
         webView.setWebChromeClient(new WebChromeClient() {

@@ -83,6 +83,8 @@
     box-shadow:0 0 22px var(--pc), inset 0 2px 8px rgba(0,0,0,.4);}
   #banks{display:flex;gap:8px;padding:0 12px 12px;}
   #banks .btn{width:46px;padding:9px 0;}
+  #kitrow{display:flex;gap:8px;padding:6px 12px 10px;align-items:stretch;}
+  #kitrow .cell{display:flex;flex-direction:column;justify-content:center;}
 
   /* ---------- séquenceur ---------- */
   #seqhead{display:flex;align-items:center;gap:10px;padding:10px 14px;}
@@ -170,7 +172,12 @@
 <div id="main">
   <!-- ====== PADS ====== -->
   <div class="panel">
-    <div class="ptitle">PADS <small>banque A &mdash; touchez pour jouer</small></div>
+    <div class="ptitle">PADS <small>touchez pour jouer</small></div>
+    <div id="kitrow">
+      <button class="btn" id="kitPrev">&#9664;</button>
+      <div class="cell" style="flex:1;text-align:center"><label>KIT</label><div id="kitName" style="font-weight:800;font-size:14px;color:var(--orange)">808 CLASSIC</div></div>
+      <button class="btn" id="kitNext">&#9654;</button>
+    </div>
     <div id="padgrid"></div>
     <div id="banks">
       <button class="btn on" data-bank="A">A</button>
@@ -326,6 +333,42 @@ const PADS = [
   ['CRASH','crash','#a04dff'],['RIDE','ride','#a04dff'],['TOM 1','tom1','#a04dff'],['TOM 2','tom2','#a04dff'],
   ['BASS','bass','#2ee6ff'],['SUB','sub','#2ee6ff'],['STAB','stab','#2ee6ff'],['SWEEP','sweep','#2ee6ff'],
 ];
+/* ---------- bibliothèque de kits (WAV embarqués dans l'APK) ---------- */
+const KITS=[
+  {name:'808 CLASSIC', dir:'samples/808'},
+  {name:'909 PUNCH',   dir:'samples/909'},
+  {name:'ELECTRO FUNK',dir:'samples/electro'},
+  {name:'SYNTH LIVE',  dir:null},  // sons synthétisés en direct (moteur v0.1)
+];
+const SOUND_NAMES=['kick','snare','clap','rim','hat','openhat','perc1','perc2',
+                   'crash','ride','tom1','tom2','bass','sub','stab','sweep'];
+let kitIdx=0, kitBuf={};
+function loadWav(url){ return new Promise((res,rej)=>{
+  const x=new XMLHttpRequest(); x.open('GET',url,true); x.responseType='arraybuffer';
+  x.onload=()=> (x.status===200||x.status===0) && x.response ? res(x.response) : rej(x.status);
+  x.onerror=rej; x.send(); }); }
+async function loadKit(i){
+  kitIdx=(i+KITS.length)%KITS.length;
+  const k=KITS[kitIdx];
+  document.getElementById('kitName').textContent=k.name;
+  kitBuf={};
+  if(!k.dir){ toast('Kit SYNTH LIVE : sons g\u00e9n\u00e9r\u00e9s en direct'); return; }
+  let ok=0;
+  await Promise.all(SOUND_NAMES.map(async n=>{
+    try{ const raw=await loadWav(k.dir+'/'+n+'.wav');
+      kitBuf[n]=await AC.decodeAudioData(raw); ok++; }catch(e){} }));
+  toast(ok===16 ? 'Kit "'+k.name+'" charg\u00e9'
+       : ok>0   ? 'Kit "'+k.name+'" partiel ('+ok+'/16)'
+                : 'Samples introuvables \u2014 sons synth\u00e9 utilis\u00e9s');
+}
+function playSound(name,t,out){
+  const b=kitBuf[name];
+  if(b){ const s=AC.createBufferSource(); s.buffer=b; s.connect(out); s.start(t); }
+  else if(SOUNDS[name]) SOUNDS[name](t,out);
+}
+document.getElementById('kitPrev').addEventListener('click',()=>{ resume(); loadKit(kitIdx-1); });
+document.getElementById('kitNext').addEventListener('click',()=>{ resume(); loadKit(kitIdx+1); });
+
 /* ---------- sampler : chargement, forme d'onde, 16 tranches ---------- */
 let sampleBuf=null;
 const SLICE_COLORS=['#ff9a2e','#ff9a2e','#ff9a2e','#ff9a2e','#ff2e88','#ff2e88','#ff2e88','#ff2e88',
@@ -393,7 +436,7 @@ function buildPads(){
     d.style.background=`linear-gradient(160deg, color-mix(in srgb,${col} 85%, #fff), color-mix(in srgb,${col} 65%, #000))`;
     d.innerHTML=`<span>${label}</span><span class="n">${i+1}</span>`;
     d.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
-      if(isA) SOUNDS[PADS[i][1]](AC.currentTime,master); else playSlice(i);
+      if(isA) playSound(PADS[i][1],AC.currentTime,master); else playSlice(i);
       d.classList.add('hit'); setTimeout(()=>d.classList.remove('hit'),120); });
     padgrid.appendChild(d);
   }
@@ -444,7 +487,7 @@ function scheduler(){
   while(nextTime < AC.currentTime + AHEAD){
     const sw = (step%2===1) ? stepDur()*swing*0.5 : 0;
     const t = nextTime + sw;
-    TRACKS.forEach((trk,ti)=>{ if(pattern[ti][step] && !trackMute[ti]) SOUNDS[trk.sound](t,trackGains[ti]); });
+    TRACKS.forEach((trk,ti)=>{ if(pattern[ti][step] && !trackMute[ti]) playSound(trk.sound,t,trackGains[ti]); });
     highlight(step);
     step=(step+1)%16; nextTime+=stepDur();
   }
@@ -559,6 +602,7 @@ document.getElementById('mClear').addEventListener('click',()=>{
 /* ---------- démarrage ---------- */
 pattern=DEMO.map(r=>r.slice());
 buildGrid();
+loadKit(0);
 </script>
 </body>
 </html>
