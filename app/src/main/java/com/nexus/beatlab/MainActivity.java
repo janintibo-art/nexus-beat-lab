@@ -72,6 +72,13 @@ public class MainActivity extends Activity {
         // Garder l'écran allumé pendant qu'on joue
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
+        // Autorisation micro (module AUDIO)
+        if (Build.VERSION.SDK_INT >= 23
+                && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                   != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 2);
+        }
+
         webView = new WebView(this);
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -95,6 +102,16 @@ public class MainActivity extends Activity {
 
         // Sélecteur de fichiers pour charger des samples audio
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        // Le micro est déjà accordé au niveau Android : on autorise la page
+                        request.grant(request.getResources());
+                    }
+                });
+            }
+
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
                                              FileChooserParams params) {

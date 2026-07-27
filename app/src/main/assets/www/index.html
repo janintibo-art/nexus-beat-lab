@@ -178,6 +178,19 @@
   .labhint{font-size:11px;color:var(--dim);padding:10px 4px 0;line-height:1.5;}
   #exprow,#exprow2{display:flex;gap:12px;align-items:stretch;}
   #expStatus{align-self:center;font-size:12px;color:var(--orange);font-weight:700;}
+  #inmeterwrap{display:flex;align-items:center;gap:10px;padding-bottom:12px;}
+  .inlbl{font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--dim);}
+  #inmeter{flex:1;height:14px;background:var(--inset);border:1px solid var(--line);border-radius:7px;
+    overflow:hidden;box-shadow:inset 0 2px 5px rgba(0,0,0,.7);}
+  #inmeter i{display:block;height:100%;width:0%;border-radius:7px;
+    background:linear-gradient(90deg,var(--green),#ffd83a 72%,var(--red));transition:width .05s;}
+  #atracks{display:flex;flex-direction:column;gap:9px;}
+  .atrack{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;
+    background:linear-gradient(180deg,#20202a,#181820);border:1px solid var(--line);}
+  .atrack .anm{font-size:11px;font-weight:800;letter-spacing:1px;width:64px;color:var(--cyan);}
+  .atrack canvas{flex:1;height:52px;background:var(--inset);border:1px solid var(--line);border-radius:6px;}
+  .atrack .btn{padding:8px 12px;font-size:11px;}
+  .atrack.armed{border-color:var(--red);box-shadow:0 0 12px rgba(255,59,48,.28);}
 
   /* ---------- menu ---------- */
   #menuBtn{font-size:18px;padding:9px 15px;}
@@ -220,6 +233,7 @@
   <button class="btn" data-win="piano">&#127929; PIANO ROLL</button>
   <button class="btn" data-win="eq">&#128202; EQUALIZER</button>
   <button class="btn" data-win="lab">&#128295; SOUND LAB</button>
+  <button class="btn" data-win="audio">&#127908; AUDIO</button>
   <button class="btn" data-win="export">&#128190; EXPORT</button>
   <span style="flex:1"></span>
   <span class="mbhint">naviguez entre les modules &mdash; la lecture continue en fond</span>
@@ -380,6 +394,22 @@
       <input type="file" id="projFile" accept=".json,application/json" style="display:none">
     </div>
     <p class="labhint">Le fichier projet contient patterns, cha&icirc;ne, lignes de basse, r&eacute;glages sound lab et synth&eacute;. Partagez-le ou archivez-le : l'import le restaure &agrave; l'identique.</p>
+  </div>
+</div>
+<div class="modwin" id="win-audio">
+  <div class="panel mwhead">
+    <span>&#127908; AUDIO <small>enregistrez voix, instruments ou sons au micro &mdash; 4 pistes cal&eacute;es sur le s&eacute;quenceur</small></span>
+    <span style="flex:1"></span>
+    <button class="btn" id="monBtn">&#127911; MONITORING</button>
+    <div class="knob" style="--kc:var(--green)"><div class="kbody" id="inGainK"></div><label>GAIN ENTR&Eacute;E</label><div class="kv" id="inGainV">100</div></div>
+    <button class="btn" data-win="studio">&#8592; STUDIO</button>
+  </div>
+  <div class="panel" style="padding:14px">
+    <div id="inmeterwrap"><span class="inlbl">NIVEAU D'ENTR&Eacute;E</span><div id="inmeter"></div></div>
+    <div id="atracks"></div>
+    <p class="labhint">Touchez <b>ARMER</b> puis <b>&#9679; REC</b> : le compte &agrave; rebours d'une mesure se lance, puis l'enregistrement d&eacute;marre en m&ecirc;me temps que le s&eacute;quenceur.
+    Les pistes arm&eacute;es jouent en boucle avec le pattern et sont incluses dans l'export WAV.
+    Utilisez un casque pour &eacute;viter le larsen si le monitoring est activ&eacute;.</p>
   </div>
 </div>
 </div><!-- /stage -->
@@ -831,9 +861,12 @@ function highlight(s){
 function play(){ resume(); if(playing) return; playing=true; step=0; nextTime=AC.currentTime+0.06;
   playStart=nextTime;
   if(mode==='song'&&chain.length){ chainPos=0; selectPattern(chain[0],true); renderChain(); }
+  startAudioPlayback(playStart);
   timer=setInterval(scheduler,LOOKAHEAD); playBtn.classList.add('on'); }
 function stop(){ playing=false; clearInterval(timer);
   playBtn.classList.remove('on'); renderChain();
+  stopAudioPlayback();
+  if(audioRecording){ stopAudioRec(); recBtn.classList.remove('on'); }
   document.querySelectorAll('.playcol').forEach(e=>e.classList.remove('playcol')); }
 function resume(){ if(AC.state==='suspended') AC.resume(); }
 
@@ -848,7 +881,19 @@ document.getElementById('clearBtn').addEventListener('click',()=>{
 let recording=false;
 const REC_MAP={kick:0,snare:1,clap:2,hat:3,bass:4,perc1:5}; // pad → piste du séquenceur
 const recBtn=document.getElementById('recBtn');
-recBtn.addEventListener('click',()=>{
+recBtn.addEventListener('click',async ()=>{
+  if(audioRecording){ stopAudioRec(); recBtn.classList.remove('on'); recording=false;
+    toast('Enregistrement audio termin\u00e9'); return; }
+  if(armedIdx>=0){                       // enregistrement micro prioritaire
+    recBtn.classList.add('on');
+    toast('Enregistrement micro dans 1 mesure\u2026');
+    if(!playing) play();
+    const wait=(patLens[curPat]*stepDur())*1000;
+    setTimeout(async ()=>{ const ok=await startAudioRec();
+      if(ok) toast('\u25cf Enregistrement en cours \u2014 REC pour arr\u00eater');
+      else recBtn.classList.remove('on'); }, wait);
+    return;
+  }
   recording=!recording; recBtn.classList.toggle('on',recording);
   if(recording){ toast(playing ? 'REC : jouez les pads, les frappes s\u2019inscrivent dans la grille'
                               : 'REC arm\u00e9 : appuyez sur PLAY puis jouez les pads');
@@ -1093,10 +1138,17 @@ function buildOfflineChain(C){
   const trackOuts=TRACKS.map((_,ti)=>{ const g=C.createGain();
     g.gain.value=trackGains[ti].gain.value; g.connect(m); return g; });
   const bassOut=C.createGain(); bassOut.gain.value=bassGain.gain.value; bassOut.connect(m);
-  return {trackOuts, bassOut};
+  // pistes audio enregistrées (bouclées sur toute la durée du rendu)
+  const audioOut=C.createGain(); audioOut.gain.value=1; audioOut.connect(m);
+  return {trackOuts, bassOut, audioOut, ctx:C};
 }
 function scheduleOffline(nodes, seq, loops){
-  const sd=stepDur(); let t=0.05;
+  const sd=stepDur(); const t0=0.05; let t=t0;
+  // pistes audio en boucle depuis le début du rendu
+  audioTracks.forEach(tr=>{ if(!tr.buf||!tr.play) return;
+    const s=nodes.ctx.createBufferSource(); s.buffer=tr.buf; s.loop=true;
+    const g=nodes.ctx.createGain(); g.gain.value=tr.gain;
+    s.connect(g); g.connect(nodes.audioOut); s.start(t0); });
   for(let L=0;L<loops;L++) for(const p of seq){
     const len=patLens[p], pat=patterns[p], line=bassLines[p];
     for(let s=0;s<len;s++){
@@ -1183,6 +1235,128 @@ document.getElementById('projFile').addEventListener('change',async e=>{
   try{ applyProject(JSON.parse(await f.text())); toast('Projet import\u00e9'); }
   catch(err){ toast('Fichier projet invalide'); }
 });
+
+/* ================== MODULE AUDIO : enregistrement micro ================== */
+const NAUD=4;
+const audioTracks=Array.from({length:NAUD},()=>({buf:null, play:true, gain:0.9, node:null}));
+const audioBus=AC.createGain(); audioBus.gain.value=1; audioBus.connect(master);
+let micStream=null, micSrc=null, micGain=null, monGain=null, micAnalyser=null;
+let recorder=null, recChunks=[], armedIdx=-1, audioRecording=false, countdown=0;
+
+async function initMic(){
+  if(micStream) return true;
+  try{
+    micStream=await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    micSrc=AC.createMediaStreamSource(micStream);
+    micGain=AC.createGain(); micGain.gain.value=1;
+    monGain=AC.createGain(); monGain.gain.value=0;   // monitoring coupé par défaut
+    micAnalyser=AC.createAnalyser(); micAnalyser.fftSize=512;
+    micSrc.connect(micGain); micGain.connect(micAnalyser); micGain.connect(monGain);
+    monGain.connect(master);
+    return true;
+  }catch(e){ toast('Micro indisponible : autorisez l\u2019acc\u00e8s dans les param\u00e8tres'); return false; }
+}
+const monBtn=document.getElementById('monBtn');
+monBtn.addEventListener('click',async ()=>{ resume(); if(!await initMic()) return;
+  const on=!monBtn.classList.contains('on');
+  monBtn.classList.toggle('on',on); monGain.gain.value=on?1:0;
+  if(on) toast('Monitoring actif \u2014 utilisez un casque pour \u00e9viter le larsen'); });
+makeKnob(document.getElementById('inGainK'),document.getElementById('inGainV'),
+  0.5,v=>{ if(micGain) micGain.gain.value=v*2; },v=>Math.round(v*200));
+
+/* ---------- interface des pistes audio ---------- */
+const atracks=document.getElementById('atracks');
+function drawAudioWave(i){
+  const cv=document.getElementById('acv'+i); if(!cv) return;
+  const ctx=cv.getContext('2d'), W=cv.width=cv.clientWidth||700, H=cv.height=52;
+  ctx.fillStyle='#0a0a0d'; ctx.fillRect(0,0,W,H);
+  const b=audioTracks[i].buf;
+  if(!b){ ctx.fillStyle='#4c4c58'; ctx.font='11px sans-serif';
+    ctx.fillText('piste vide',10,H/2+4); return; }
+  const d=b.getChannelData(0), st=Math.max(1,Math.ceil(d.length/W));
+  ctx.strokeStyle='#2ee6ff'; ctx.beginPath();
+  for(let x=0;x<W;x++){ let mn=1,mx=-1;
+    for(let j=0;j<st;j++){ const v=d[x*st+j]||0; if(v<mn)mn=v; if(v>mx)mx=v; }
+    ctx.moveTo(x+.5,(1+mn)*H/2); ctx.lineTo(x+.5,(1+mx)*H/2); }
+  ctx.stroke();
+}
+function buildAudioUI(){
+  atracks.innerHTML='';
+  audioTracks.forEach((tr,i)=>{
+    const row=document.createElement('div'); row.className='atrack'+(armedIdx===i?' armed':'');
+    row.innerHTML=`<span class="anm">PISTE ${i+1}</span>
+      <button class="btn red armb">ARMER</button>
+      <canvas id="acv${i}"></canvas>
+      <button class="btn playb">${tr.play?'ON':'OFF'}</button>
+      <button class="btn delb">&#10005;</button>`;
+    row.querySelector('.armb').addEventListener('click',async ()=>{ resume();
+      if(!await initMic()) return;
+      armedIdx = armedIdx===i ? -1 : i; buildAudioUI();
+      toast(armedIdx===i ? 'Piste '+(i+1)+' arm\u00e9e \u2014 appuyez sur \u25cf REC' : 'Piste d\u00e9sarm\u00e9e'); });
+    row.querySelector('.armb').classList.toggle('on',armedIdx===i);
+    const pb=row.querySelector('.playb'); pb.classList.toggle('on',tr.play);
+    pb.addEventListener('click',()=>{ tr.play=!tr.play; buildAudioUI(); });
+    row.querySelector('.delb').addEventListener('click',()=>{
+      tr.buf=null; buildAudioUI(); toast('Piste '+(i+1)+' effac\u00e9e'); });
+    atracks.appendChild(row);
+    requestAnimationFrame(()=>drawAudioWave(i));
+  });
+}
+buildAudioUI();
+
+/* ---------- enregistrement : démarrage avec le séquenceur ---------- */
+async function startAudioRec(){
+  if(armedIdx<0 || audioRecording) return false;
+  if(!await initMic()) return false;
+  const dest=AC.createMediaStreamDestination();
+  micGain.connect(dest);
+  recChunks=[];
+  try{ recorder=new MediaRecorder(dest.stream); }
+  catch(e){ toast('Enregistrement non pris en charge sur cet appareil'); return false; }
+  recorder.ondataavailable=e=>{ if(e.data.size) recChunks.push(e.data); };
+  recorder.onstop=async ()=>{
+    micGain.disconnect(dest);
+    try{
+      const blob=new Blob(recChunks,{type:recorder.mimeType||'audio/webm'});
+      audioTracks[armedIdx].buf=await AC.decodeAudioData(await blob.arrayBuffer());
+      toast('Piste '+(armedIdx+1)+' enregistr\u00e9e');
+    }catch(e){ toast('D\u00e9codage impossible : '+e.message); }
+    audioRecording=false; buildAudioUI();
+  };
+  recorder.start(); audioRecording=true;
+  return true;
+}
+function stopAudioRec(){ if(recorder && recorder.state==='recording') recorder.stop(); }
+
+/* ---------- lecture des pistes audio, calée sur la boucle ---------- */
+function startAudioPlayback(t0){
+  audioTracks.forEach(tr=>{
+    if(tr.node){ try{tr.node.stop();}catch(e){} tr.node=null; }
+    if(!tr.buf || !tr.play) return;
+    const s=AC.createBufferSource(); s.buffer=tr.buf; s.loop=true;
+    const g=AC.createGain(); g.gain.value=tr.gain;
+    s.connect(g); g.connect(audioBus); s.start(t0); tr.node=s;
+  });
+}
+function stopAudioPlayback(){
+  audioTracks.forEach(tr=>{ if(tr.node){ try{tr.node.stop();}catch(e){} tr.node=null; } });
+}
+
+/* ---------- vumètre d'entrée ---------- */
+(function inMeter(){
+  const bar=document.querySelector('#inmeter i')||(()=>{ const i=document.createElement('i');
+    document.getElementById('inmeter').appendChild(i); return i; })();
+  const d=new Uint8Array(256);
+  (function loop(){
+    if(micAnalyser && winIsOpen('audio')){
+      micAnalyser.getByteTimeDomainData(d);
+      let pk=0; for(let i=0;i<d.length;i++) pk=Math.max(pk,Math.abs(d[i]-128)/128);
+      bar.style.width=Math.min(100,pk*130)+'%';
+    }
+    requestAnimationFrame(loop);
+  })();
+})();
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
