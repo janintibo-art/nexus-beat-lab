@@ -11,7 +11,8 @@
     --orange:#ff9a2e; --pink:#ff2e88; --purple:#a04dff; --cyan:#2ee6ff;
     --green:#39d98a; --red:#ff3b30;
   }
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+    touch-action:manipulation;} /* tap simple immédiat + pincement 2 doigts OK, double-tap zoom désactivé */
   html,body{background:var(--bg);color:var(--txt);
     font-family:'Segoe UI',Roboto,'Helvetica Neue',sans-serif;overflow-x:hidden;}
   body{width:1680px;padding:10px;}
