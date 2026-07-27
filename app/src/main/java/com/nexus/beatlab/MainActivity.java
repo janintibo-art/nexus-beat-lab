@@ -2,21 +2,67 @@ package com.nexus.beatlab;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 
 public class MainActivity extends Activity {
 
     private static final int FILE_REQUEST = 1;
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
+    private final StringBuilder expBuf = new StringBuilder();
+    private String expName = "export.wav";
+
+    /** Pont JS → Android pour enregistrer les fichiers exportés (WAV, JSON). */
+    class ExportBridge {
+        @JavascriptInterface
+        public void begin(String name) { expBuf.setLength(0); expName = name; }
+
+        @JavascriptInterface
+        public void append(String chunk) { expBuf.append(chunk); }
+
+        @JavascriptInterface
+        public String end() {
+            try {
+                byte[] data = Base64.decode(expBuf.toString(), Base64.DEFAULT);
+                expBuf.setLength(0);
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues cv = new ContentValues();
+                    cv.put(MediaStore.Downloads.DISPLAY_NAME, expName);
+                    cv.put(MediaStore.Downloads.MIME_TYPE,
+                            expName.endsWith(".wav") ? "audio/wav" : "application/json");
+                    Uri uri = getContentResolver()
+                            .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                    OutputStream os = getContentResolver().openOutputStream(uri);
+                    os.write(data); os.close();
+                    return "ok:T\u00e9l\u00e9chargements/" + expName;
+                } else {
+                    File f = new File(getExternalFilesDir(null), expName);
+                    FileOutputStream fo = new FileOutputStream(f);
+                    fo.write(data); fo.close();
+                    return "ok:" + f.getAbsolutePath();
+                }
+            } catch (Exception e) {
+                expBuf.setLength(0);
+                return "err:" + e.getMessage();
+            }
+        }
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -43,6 +89,9 @@ public class MainActivity extends Activity {
         // Autoriser la lecture des samples WAV embarqués (XHR sur file://)
         s.setAllowFileAccessFromFileURLs(true);
         s.setAllowUniversalAccessFromFileURLs(true);
+
+        // Pont d'export des fichiers (WAV, projet JSON)
+        webView.addJavascriptInterface(new ExportBridge(), "AndroidExport");
 
         // Sélecteur de fichiers pour charger des samples audio
         webView.setWebChromeClient(new WebChromeClient() {
