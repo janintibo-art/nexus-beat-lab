@@ -290,6 +290,15 @@
   #exprow,#exprow2,#exprow3{display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;}
   #stemStatus{align-self:center;font-size:12px;color:var(--orange);font-weight:700;}
   #expStatus{align-self:center;font-size:12px;color:var(--orange);font-weight:700;}
+  #vxrow{display:flex;gap:8px;flex-wrap:wrap;padding-bottom:10px;}
+  #vxrow .btn{padding:0 13px;min-height:40px;font-size:11px;}
+  #vxknobs{display:flex;gap:10px;flex-wrap:wrap;padding-bottom:10px;}
+  #vxtune{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    border-top:1px solid var(--line-soft);padding-top:10px;}
+  #vxNote{font-size:22px;font-weight:900;color:var(--cyan);min-width:56px;
+    font-variant-numeric:tabular-nums;}
+  #vxCents{font-size:12px;font-weight:800;min-width:90px;font-variant-numeric:tabular-nums;}
+  #vxScale{font-size:12px;font-weight:800;color:var(--orange);}
   #inmeterwrap{display:flex;align-items:center;gap:10px;padding-bottom:12px;}
   .inlbl{font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--dim);}
   #inmeter{flex:1;height:14px;background:var(--inset);border:1px solid var(--line);border-radius:7px;
@@ -764,6 +773,33 @@
     <p class="labhint">Touchez <b>ARMER</b> puis <b>&#9679; REC</b> : le compte &agrave; rebours d'une mesure se lance, puis l'enregistrement d&eacute;marre en m&ecirc;me temps que le s&eacute;quenceur.
     Les pistes arm&eacute;es jouent en boucle avec le pattern et sont incluses dans l'export WAV.
     Utilisez un casque pour &eacute;viter le larsen si le monitoring est activ&eacute;.</p>
+  </div>
+  <div class="panel" style="padding:14px 16px 16px">
+    <div class="ptitle" style="padding:0 0 10px">CHA&Icirc;NE VOIX <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">appliqu&eacute;e au monitoring et &agrave; l'enregistrement des pistes micro</small></div>
+    <div id="vxrow">
+      <button class="btn" id="vxOn">&#127908; ACTIVER</button>
+      <button class="btn" id="vxHP">COUPE-BAS</button>
+      <button class="btn" id="vxDS">DE-ESSER</button>
+      <button class="btn" id="vxComp">COMPRESSEUR</button>
+      <button class="btn" id="vxDbl">DOUBLEUR</button>
+      <button class="btn" id="vxTune">&#127925; AUTO-TUNE</button>
+    </div>
+    <div id="vxknobs">
+      <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="vxHPK"></div><label>COUPE-BAS</label><div class="kv" id="vxHPV">90Hz</div></div>
+      <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="vxDSK"></div><label>DE-ESSER</label><div class="kv" id="vxDSV">50</div></div>
+      <div class="knob" style="--kc:var(--green)"><div class="kbody" id="vxCmpK"></div><label>COMPRESSION</label><div class="kv" id="vxCmpV">45</div></div>
+      <div class="knob" style="--kc:var(--purple)"><div class="kbody" id="vxDblK"></div><label>DOUBLEUR</label><div class="kv" id="vxDblV">35</div></div>
+      <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="vxTuneK"></div><label>CORRECTION</label><div class="kv" id="vxTuneV">70</div></div>
+      <div class="knob" style="--kc:var(--red)"><div class="kbody" id="vxAirK"></div><label>AIR</label><div class="kv" id="vxAirV">30</div></div>
+    </div>
+    <div id="vxtune">
+      <span class="prtlbl">NOTE D&Eacute;TECT&Eacute;E</span>
+      <span id="vxNote">&mdash;</span>
+      <span id="vxCents"></span>
+      <span class="prtlbl" style="margin-left:14px">GAMME</span>
+      <span id="vxScale">C Mineure</span>
+      <span class="labhint" style="padding:0 0 0 14px">l'auto-tune ram&egrave;ne votre voix vers la gamme choisie dans le PIANO ROLL</span>
+    </div>
   </div>
 </div>
 <div class="modwin" id="win-master">
@@ -1868,6 +1904,8 @@ function switchWin(w){
     if(w==='auto') drawAuto();
     if(w==='edit') drawEditor();
     if(w==='lab') labSync();
+    if(w==='audio'){ const s=document.getElementById('vxScale');
+      if(s) s.textContent=NOTE_NAMES[scaleRoot]+' '+SCALES[scaleKey].label; }
     if(w==='midi') midiRefresh();
     if(w==='perf') renderPerform();
     if(w==='pl') renderPl(); }
@@ -2474,6 +2512,7 @@ function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bass
   fx:{...fx}, swing, kitIdx, clips, plLen, plActive,
   scale:{root:scaleRoot,key:scaleKey,snap:scaleSnap},
   midiOut:{chan:midiChan, clock:clockOn, map:midiSendMap.map(m=>m?{on:m.on,note:m.note}:null)},
+  vx:{...vx},
   tracks:TRACKS.map(t=>({name:t.name,sound:t.sound,color:t.color,uid:t.uid||0})),
   inserts:inserts.map(l=>(l||[null,null]).map(x=>x?{id:x.id,params:{...x.params}}:null))}; }
 function applyProject(d){
@@ -2531,6 +2570,10 @@ function applyProject(d){
     while(inserts.length<TRACKS.length) inserts.push([null,null]);
     TRACKS.forEach((_,ti)=>rebuildInserts(ti));
     if(typeof buildInserts==='function'&&winIsOpen('lab')) buildInserts(); }
+  if(d.vx){ Object.assign(vx,d.vx);
+    [['vxOn','on'],['vxHP','hp'],['vxDS','ds'],['vxComp','comp'],['vxDbl','dbl'],['vxTune','tune']]
+      .forEach(([id,k])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('on',vx[k]); });
+    applyVoice(); }
   if(d.midiOut){ midiChan=d.midiOut.chan||9;
     if(d.midiOut.map) midiSendMap=d.midiOut.map.map(m=>m?{on:!!m.on,note:m.note}:null);
     midiOutOn=midiSendMap.some(x=>x&&x.on);
@@ -2649,13 +2692,15 @@ async function startAudioRec(){
   if(armedIdx<0 || audioRecording) return false;
   if(!await initMic()) return false;
   const dest=AC.createMediaStreamDestination();
-  micGain.connect(dest);
+  vxDest=dest;
+  (vx.on && vxOut ? vxOut : micGain).connect(dest);
   recChunks=[];
   try{ recorder=new MediaRecorder(dest.stream); }
   catch(e){ toast('Enregistrement non pris en charge sur cet appareil'); return false; }
   recorder.ondataavailable=e=>{ if(e.data.size) recChunks.push(e.data); };
   recorder.onstop=async ()=>{
-    micGain.disconnect(dest);
+    try{ (vx.on && vxOut ? vxOut : micGain).disconnect(dest); }catch(e){}
+    vxDest=null;
     try{
       const blob=new Blob(recChunks,{type:recorder.mimeType||'audio/webm'});
       audioTracks[armedIdx].buf=await AC.decodeAudioData(await blob.arrayBuffer());
@@ -4336,6 +4381,197 @@ document.getElementById('midiChanCell').addEventListener('click',()=>{
 document.getElementById('midiPanic').addEventListener('click',midiPanic);
 buildMidiSend();
 
+/* --- décaleur de hauteur temps réel : deux délais modulés en fondu croisé --- */
+function makePitchShift(C){
+  const inp=C.createGain(), out=C.createGain();
+  const dry=C.createGain(); dry.gain.value=0;
+  inp.connect(dry); dry.connect(out);
+  const L=[];
+  for(let i=0;i<2;i++){
+    const d=C.createDelay(0.3), g=C.createGain();
+    g.gain.value=0; inp.connect(d); d.connect(g); g.connect(out);
+    L.push({d,g});
+  }
+  let cents=0, timer=null, phase=0;
+  const WIN=0.09;                      /* durée d'une fenêtre, en secondes */
+  function schedule(){
+    const t=AC.currentTime;
+    const rate=Math.pow(2,cents/1200)-1;       /* vitesse de dérive du délai */
+    for(let i=0;i<2;i++){
+      const o=L[i], ph=(phase+i*0.5)%1;
+      const t0=t, t1=t+WIN;
+      const base=0.02+ph*WIN*Math.abs(rate||0.001);
+      o.d.delayTime.cancelScheduledValues(t0);
+      o.d.delayTime.setValueAtTime(rate>0?0.02+WIN*rate:0.02,t0);
+      o.d.delayTime.linearRampToValueAtTime(rate>0?0.02:0.02+WIN*Math.abs(rate),t1);
+      /* fondu croisé : l'une monte pendant que l'autre descend */
+      const up=(i===0)===(Math.floor(phase*2)%2===0);
+      o.g.gain.cancelScheduledValues(t0);
+      o.g.gain.setValueAtTime(up?0:1,t0);
+      o.g.gain.linearRampToValueAtTime(up?1:0,t1);
+    }
+    phase=(phase+0.5)%1;
+  }
+  return {input:inp, output:out,
+    set(c){
+      cents=Math.max(-200,Math.min(200,c||0));
+      const active=Math.abs(cents)>3;
+      dry.gain.setTargetAtTime(active?0:1,AC.currentTime,0.03);
+      if(active && !timer){ schedule(); timer=setInterval(schedule,WIN*1000); }
+      else if(!active && timer){ clearInterval(timer); timer=null;
+        L.forEach(o=>o.g.gain.setTargetAtTime(0,AC.currentTime,0.03)); }
+    }};
+}
+
+/* ================== CHAÎNE VOIX ==================
+   micro → coupe-bas → de-esser → compresseur → air → doubleur → sortie
+   L'auto-tune corrige la hauteur vers la gamme choisie dans le PIANO ROLL. */
+const vx={on:false, hp:true, ds:true, comp:true, dbl:false, tune:false,
+          hpF:0.35, dsA:0.5, cmp:0.45, dblA:0.35, tuneA:0.7, air:0.3};
+let vxIn=null, vxOut=null, vxNodes=null, vxDetune=null, vxAnalyser=null;
+function buildVoiceChain(){
+  const C=AC;
+  const inp=C.createGain(), out=C.createGain();
+  /* coupe-bas : enlève les bruits de manipulation et les plosives */
+  const hp=C.createBiquadFilter(); hp.type='highpass'; hp.Q.value=0.7;
+  /* de-esser : compresseur piloté par les aigus, adouci par un filtre en cloche */
+  const ds=C.createBiquadFilter(); ds.type='peaking'; ds.frequency.value=6800; ds.Q.value=2.4;
+  /* compresseur vocal */
+  const cp=C.createDynamicsCompressor();
+  cp.attack.value=0.006; cp.release.value=0.16; cp.knee.value=8;
+  const mk=C.createGain();
+  /* air : petit relèvement des hautes fréquences */
+  const air=C.createBiquadFilter(); air.type='highshelf'; air.frequency.value=9000;
+  inp.connect(hp); hp.connect(ds); ds.connect(cp); cp.connect(mk); mk.connect(air);
+  /* correction de hauteur insérée après le traitement */
+  const ps=makePitchShift(C);
+  air.connect(ps.input); ps.output.connect(out);
+  /* doubleur : deux copies légèrement retardées et désaccordées, écartées en stéréo */
+  const dblG=C.createGain(); dblG.gain.value=0;   /* branché sur la sortie du décaleur */
+  const mkDouble=(delayMs,detune,pan)=>{
+    const d=C.createDelay(0.08); d.delayTime.value=delayMs/1000;
+    const p=C.createStereoPanner?C.createStereoPanner():C.createGain();
+    if(p.pan) p.pan.value=pan;
+    /* léger vibrato de désaccord, pour éviter l'effet mécanique */
+    const lfo=C.createOscillator(); lfo.frequency.value=0.3+Math.random()*0.4;
+    const lg=C.createGain(); lg.gain.value=detune/1000;
+    lfo.connect(lg); lg.connect(d.delayTime); lfo.start();
+    ps.output.connect(d); d.connect(p); p.connect(dblG);
+    return d;
+  };
+  mkDouble(19,0.6,-0.65); mkDouble(27,0.8,0.65);
+  dblG.connect(out);
+  vxNodes={hp,ds,cp,mk,air,dblG,ps};
+  vxIn=inp; vxOut=out;
+  vxAnalyser=C.createAnalyser(); vxAnalyser.fftSize=2048;
+  inp.connect(vxAnalyser);
+  applyVoice();
+}
+function applyVoice(){
+  if(!vxNodes) return;
+  const n=vxNodes;
+  n.hp.frequency.value = vx.hp ? 50+vx.hpF*250 : 20;
+  n.ds.gain.value      = vx.ds ? -vx.dsA*16 : 0;
+  n.cp.threshold.value = vx.comp ? -6-vx.cmp*30 : 0;
+  n.cp.ratio.value     = vx.comp ? 1.5+vx.cmp*7 : 1;
+  n.mk.gain.value      = vx.comp ? Math.pow(10,(vx.cmp*9)/20) : 1;
+  n.air.gain.value     = vx.air*10;
+  n.dblG.gain.value    = vx.dbl ? vx.dblA*0.85 : 0;
+  if(n.ps && !vx.tune) n.ps.set(0);
+  document.getElementById('vxHPV').textContent=Math.round(50+vx.hpF*250)+'Hz';
+}
+/* --- détection de hauteur (autocorrélation) et correction vers la gamme --- */
+let vxBuf=null, vxLastNote=null;
+function detectPitch(){
+  if(!vxAnalyser) return null;
+  if(!vxBuf) vxBuf=new Float32Array(vxAnalyser.fftSize);
+  vxAnalyser.getFloatTimeDomainData(vxBuf);
+  const N=vxBuf.length;
+  let rms=0; for(let i=0;i<N;i++) rms+=vxBuf[i]*vxBuf[i];
+  rms=Math.sqrt(rms/N);
+  if(rms<0.012) return null;                    /* trop faible : pas de voix */
+  const sr=AC.sampleRate;
+  const minP=Math.floor(sr/900), maxP=Math.floor(sr/70);
+  let best=-1, bestCorr=0;
+  for(let p=minP;p<=maxP;p++){
+    let c=0;
+    for(let i=0;i<N-p;i+=2) c+=vxBuf[i]*vxBuf[i+p];
+    if(c>bestCorr){ bestCorr=c; best=p; }
+  }
+  if(best<0 || bestCorr<0.0015) return null;
+  return sr/best;
+}
+function nearestScaleFreq(f){
+  const midi=69+12*Math.log2(f/440);
+  const pc=((Math.round(midi)-scaleRoot)%12+12)%12;
+  const iv=SCALES[scaleKey].iv;
+  /* cherche le degré le plus proche dans la gamme */
+  let bestN=Math.round(midi), bestD=99;
+  for(let o=-1;o<=1;o++) for(const s of iv){
+    const cand=Math.round(midi/12)*12+scaleRoot+s+o*12;
+    const d=Math.abs(cand-midi);
+    if(d<bestD){ bestD=d; bestN=cand; }
+  }
+  return {target:440*Math.pow(2,(bestN-69)/12), note:bestN, cents:Math.round((midi-bestN)*100)};
+}
+function tickVoice(){
+  if(!vx.on || !vx.tune || !vxNodes) return;
+  const f=detectPitch();
+  const el=document.getElementById('vxNote'), ce=document.getElementById('vxCents');
+  if(!f){ if(el) el.textContent='\u2014'; if(ce) ce.textContent=''; return; }
+  const r=nearestScaleFreq(f);
+  if(el) el.textContent=NOTE_NAMES[((r.note%12)+12)%12]+(Math.floor(r.note/12)-1);
+  if(ce){ const c=r.cents;
+    ce.textContent=(c>0?'+':'')+c+' cents';
+    ce.style.color = Math.abs(c)<12 ? 'var(--green)' : Math.abs(c)<35 ? 'var(--orange)' : 'var(--red)'; }
+  /* correction appliquée au son : on ramène la voix vers la note juste */
+  vxDetune=-r.cents*vx.tuneA;
+  if(vxNodes.ps) vxNodes.ps.set(vxDetune);
+}
+/* --- branchement dans la chaîne micro --- */
+function routeVoice(){
+  if(!micGain) return;
+  try{ micGain.disconnect(); }catch(e){}
+  if(vx.on){
+    if(!vxIn) buildVoiceChain();
+    micGain.connect(vxIn);
+    vxOut.connect(micAnalyser); vxOut.connect(monGain);
+    if(vxDest) vxOut.connect(vxDest);
+  } else {
+    micGain.connect(micAnalyser); micGain.connect(monGain);
+    if(vxDest) micGain.connect(vxDest);
+  }
+}
+let vxDest=null;    /* destination d'enregistrement, branchée par startAudioRec */
+/* --- interface --- */
+[['vxOn','on'],['vxHP','hp'],['vxDS','ds'],['vxComp','comp'],['vxDbl','dbl'],['vxTune','tune']]
+.forEach(([id,key])=>{
+  const b=document.getElementById(id);
+  b.addEventListener('click',async ()=>{ resume();
+    if(key==='on'){ if(!micStream) await initMic(); }
+    vx[key]=!vx[key]; b.classList.toggle('on',vx[key]);
+    if(key==='on') routeVoice();
+    applyVoice();
+    if(key==='on') toast(vx.on?'Cha\u00eene voix active sur le micro':'Cha\u00eene voix d\u00e9sactiv\u00e9e');
+    if(key==='tune'&&vx.tune) toast('Auto-tune vers '+NOTE_NAMES[scaleRoot]+' '+SCALES[scaleKey].label
+      +' \u2014 changez la gamme dans le PIANO ROLL');
+  });
+});
+['hp','ds','comp'].forEach(k=>document.getElementById(
+  k==='hp'?'vxHP':k==='ds'?'vxDS':'vxComp').classList.add('on'));
+makeKnob(document.getElementById('vxHPK'),document.getElementById('vxHPV'),
+  0.35,v=>{vx.hpF=v;applyVoice();},v=>Math.round(50+v*250)+'Hz');
+makeKnob(document.getElementById('vxDSK'),document.getElementById('vxDSV'),
+  0.5,v=>{vx.dsA=v;applyVoice();},v=>Math.round(v*100));
+makeKnob(document.getElementById('vxCmpK'),document.getElementById('vxCmpV'),
+  0.45,v=>{vx.cmp=v;applyVoice();},v=>Math.round(v*100));
+makeKnob(document.getElementById('vxDblK'),document.getElementById('vxDblV'),
+  0.35,v=>{vx.dblA=v;applyVoice();},v=>Math.round(v*100));
+makeKnob(document.getElementById('vxTuneK'),document.getElementById('vxTuneV'),
+  0.7,v=>vx.tuneA=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('vxAirK'),document.getElementById('vxAirV'),
+  0.3,v=>{vx.air=v;applyVoice();},v=>Math.round(v*100));
+
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
   for(let i=0;i<18;i++) row.appendChild(document.createElement('i')); });
@@ -4369,6 +4605,7 @@ let uiFrame=0;
   if(uiFrame%2===0){ tickVu(); tickChMeters(); }   /* 30 i/s suffisent */
   if(typeof tickLufs==='function' && winIsOpen('master')) tickLufs();
   if(typeof tickInMeter==='function' && winIsOpen('audio')) tickInMeter();
+  if(uiFrame%6===0 && typeof tickVoice==='function' && winIsOpen('audio')) tickVoice();
   requestAnimationFrame(uiLoop);
 })();
 
