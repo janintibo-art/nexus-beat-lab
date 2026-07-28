@@ -370,6 +370,19 @@
   #djval{font-size:9px;font-weight:800;letter-spacing:.6px;color:#fff;}
   #djpanel.lowpass #djcap{box-shadow:0 0 20px -2px var(--orange),0 4px 10px rgba(0,0,0,.7);}
   #djpanel.highpass #djcap{box-shadow:0 0 20px -2px var(--cyan),0 4px 10px rgba(0,0,0,.7);}
+  #brkrow{display:flex;gap:10px;flex-wrap:wrap;padding-bottom:12px;}
+  .brkbtn{min-width:112px;padding:16px 12px;border-radius:12px;cursor:pointer;text-align:center;
+    font-size:13px;font-weight:900;letter-spacing:.8px;touch-action:none;
+    background:linear-gradient(180deg,#123a44,#0c2630);border:1px solid #2a6c7e;color:#a8ecff;
+    box-shadow:0 4px 9px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.1);
+    transition:transform .09s var(--ease), box-shadow .13s var(--ease);}
+  .brkbtn small{display:block;font-size:8px;letter-spacing:.6px;color:#6ea9bd;margin-top:3px;
+    font-weight:700;}
+  .brkbtn.held{background:linear-gradient(180deg,#2ee6ff,#0f8ba0);color:#032028;border-color:#a8f2ff;
+    box-shadow:0 0 24px -3px var(--cyan);transform:translateY(1px) scale(.98);}
+  #brkfill{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+    border-top:1px solid var(--line-soft);padding-top:12px;}
+  #brkfill .btn{padding:0 12px;min-height:38px;font-size:11px;}
   #buildrow{display:flex;gap:10px;flex-wrap:wrap;}
   .buildbtn{min-width:120px;padding:16px 14px;border-radius:12px;cursor:pointer;text-align:center;
     font-size:13px;font-weight:900;letter-spacing:1px;
@@ -952,6 +965,17 @@
     </div>
   </div>
   <div class="panel" style="padding:14px 16px 16px">
+    <div class="ptitle" style="padding:0 0 10px">BREAKS <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">maintenez pour d&eacute;former le son en direct &mdash; rel&acirc;chez et le beat repart intact</small></div>
+    <div id="brkrow"></div>
+    <div id="brkfill">
+      <span class="prtlbl">&Eacute;CRIRE UN FILL DANS LE PATTERN</span>
+      <button class="btn" id="fillRoll">ROULEMENT</button>
+      <button class="btn" id="fillStut">STUTTER</button>
+      <button class="btn" id="fillTrip">TRIOLETS</button>
+      <button class="btn" id="fillLast">&#9636; DERNI&Egrave;RE MESURE</button>
+    </div>
+  </div>
+  <div class="panel" style="padding:14px 16px 16px">
     <div class="ptitle" style="padding:0 0 10px">MONT&Eacute;E <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">le filtre s'ouvre, le roulement s'acc&eacute;l&egrave;re, la r&eacute;verb monte &mdash; puis tout retombe sur le temps</small></div>
     <div id="buildrow"></div>
   </div>
@@ -1529,8 +1553,11 @@ function scheduler(){
     if(build) buildTick(t,step);
     if(autoOn){ const ad=autoData[curPat];
       AUTO_TARGETS.forEach((tg,ti)=>{ const v=ad[ti][step]; if(v!==null) tg.apply(v); }); }
-    TRACKS.forEach((trk,ti)=>{ const lv=+pattern[ti][step]||0;
-      if(lv && audible(ti)) playTrack(ti,t,null,VELS[lv]); });
+    if(brkMode) brkTick(t,step);
+    if(!brkSilencesPattern()){
+      TRACKS.forEach((trk,ti)=>{ const lv=+pattern[ti][step]||0;
+        if(lv && audible(ti)) playTrack(ti,t,null,VELS[lv]); });
+    }
     const bn=bassLines[curPat][step];
     if(bn!==null && bn!==undefined) noteArr(bn).forEach(n=>playNoteObj(n,t));
     highlight(step);
@@ -1634,6 +1661,7 @@ function stop(){ playing=false; clearInterval(timer);
   if(typeof renderPl==='function'&&winIsOpen('pl')) renderPl();
   stopAudioPlayback();
   if(typeof endBuild==='function') endBuild();
+  if(typeof brkEnd==='function') brkEnd();
   pumpU.reset();
   if(audioRecording){ stopAudioRec(); recBtn.classList.remove('on'); }
   clearHighlight(); }
@@ -1712,7 +1740,7 @@ function makeKnob(el,valEl,init,onChange,fmt){
     if(now-tLast<330){ v=init; render(); buzz(14); tLast=0; hideBubble(); return; }
     tLast=now;
     lx=e.clientX; ly=e.clientY; moved=false;
-    el.setPointerCapture(e.pointerId);
+    try{ el.setPointerCapture(e.pointerId); }catch(err){}
     el.classList.add('grabbing');
     showBubble(e.clientX,e.clientY);
   });
@@ -3986,7 +4014,8 @@ function applyDj(p){
   function posFrom(x){ const r=tr.getBoundingClientRect();
     return Math.max(-1,Math.min(1,((x-r.left)/r.width-0.5)*2.38)); }
   tr.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
-    tr.setPointerCapture(e.pointerId); cap.classList.add('active'); applyDj(posFrom(e.clientX)); });
+    try{ tr.setPointerCapture(e.pointerId); }catch(err){}
+    cap.classList.add('active'); applyDj(posFrom(e.clientX)); });
   tr.addEventListener('pointermove',e=>{ if(e.buttons) applyDj(posFrom(e.clientX)); });
   function release(){ cap.classList.remove('active');
     if(!djHold) applyDj(0); }                      /* ressort au centre, sauf si maintenu */
@@ -4047,6 +4076,141 @@ function buildTick(t,step){
     d.addEventListener('pointerdown',e=>{ e.preventDefault(); startBuild(b.bars,d); });
     row.appendChild(d); });
 })();
+
+/* ================== BREAKS : déformation en direct + fills écrits ================== */
+/* --- gate rythmique : coupe le son en créneaux, inséré sur le bus master --- */
+const gateNode=AC.createGain(); gateNode.gain.value=1;
+djHP.disconnect();
+djHP.connect(gateNode); gateNode.connect(shaper);
+let brkMode=null, brkHeld=null, stutBuf=null, stutSrc=null;
+const BREAKS=[
+  {id:'stutter', n:'STUTTER',  sub:'la mesure b\u00e9gaie'},
+  {id:'roll',    n:'ROLL',     sub:'roulement 1/32'},
+  {id:'gate',    n:'GATE',     sub:'coupures en cr\u00e9neaux'},
+  {id:'reverse', n:'REVERSE',  sub:'lecture invers\u00e9e'},
+  {id:'tape',    n:'TAPE STOP',sub:'la bande ralentit'},
+];
+function brkStart(id,el){
+  resume(); if(!playing) play();
+  brkMode=id; brkHeld=el; el.classList.add('held'); buzz(14);
+  if(id==='gate') gateNode.gain.value=1;
+  if(id==='tape'){ tapeStopStart(); }
+}
+function brkEnd(){
+  if(!brkMode) return;
+  if(brkHeld) brkHeld.classList.remove('held');
+  if(brkMode==='gate') gateNode.gain.cancelScheduledValues(AC.currentTime);
+  gateNode.gain.setTargetAtTime(1,AC.currentTime,0.01);
+  if(brkMode==='tape') tapeStopEnd();
+  brkMode=null; brkHeld=null; brkStep=0;
+}
+/* tape stop : on ralentit la lecture en tirant sur le tempo perçu */
+let tapeSaved=null;
+function tapeStopStart(){
+  tapeSaved=bpm;
+  let k=0;
+  tapeSaved_t=setInterval(()=>{ k++;
+    const f=Math.max(0.12,1-k*0.075);
+    setBpm(Math.max(20,tapeSaved*f));
+    gateNode.gain.setTargetAtTime(Math.max(0.15,f),AC.currentTime,0.05);
+    if(f<=0.12) clearInterval(tapeSaved_t);
+  },70);
+}
+let tapeSaved_t=null;
+function tapeStopEnd(){
+  clearInterval(tapeSaved_t);
+  if(tapeSaved){ setBpm(tapeSaved); tapeSaved=null; }
+  gateNode.gain.setTargetAtTime(1,AC.currentTime,0.06);
+}
+/* appelé à chaque pas : applique le break maintenu */
+let brkStep=0;
+function brkTick(t,step){
+  if(!brkMode) return;
+  const sd=stepDur();
+  if(brkMode==='gate'){
+    /* créneaux en doubles-croches */
+    gateNode.gain.setValueAtTime(1,t);
+    gateNode.gain.setValueAtTime(0.04,t+sd*0.5);
+    return;
+  }
+  if(brkMode==='roll'){
+    /* roulement de snare en 1/32 par-dessus le beat */
+    const ti=TRACKS.findIndex(x=>x.sound==='snare');
+    if(ti>=0){ playTrack(ti,t,null,0.75); playTrack(ti,t+sd/2,null,0.5); }
+    return;
+  }
+  if(brkMode==='stutter'){
+    /* le temps courant est répété : le beat bégaie sur place */
+    const loopStep=Math.floor(step/4)*4;
+    TRACKS.forEach((trk,ti)=>{ const lv=+pattern[ti][loopStep]||0;
+      if(lv && audible(ti)) playTrack(ti,t,null,VELS[lv]*0.9); });
+    gateNode.gain.setValueAtTime(1,t);
+    return;
+  }
+  if(brkMode==='reverse'){
+    /* les pas de la mesure sont lus à l'envers */
+    const len=patLens[curPat], rs=(len-1-step+len)%len;
+    TRACKS.forEach((trk,ti)=>{ const lv=+pattern[ti][rs]||0;
+      if(lv && audible(ti)) playTrack(ti,t,null,VELS[lv]); });
+    return;
+  }
+}
+/* les breaks stutter/reverse remplacent la lecture normale */
+function brkSilencesPattern(){ return brkMode==='stutter'||brkMode==='reverse'; }
+(function initBreaks(){
+  const row=document.getElementById('brkrow');
+  BREAKS.forEach(b=>{
+    const d=document.createElement('div'); d.className='brkbtn';
+    d.innerHTML=b.n+'<small>'+b.sub+'</small>';
+    d.addEventListener('pointerdown',e=>{ e.preventDefault();
+      try{ d.setPointerCapture(e.pointerId); }catch(err){}
+      brkStart(b.id,d); });
+    d.addEventListener('pointerup',brkEnd);
+    d.addEventListener('pointercancel',brkEnd);
+    d.addEventListener('pointerleave',e=>{ if(!e.buttons) brkEnd(); });
+    row.appendChild(d);
+  });
+})();
+
+/* ---------- fills écrits dans le pattern (modifiables ensuite) ---------- */
+let fillLastBarOnly=true;
+document.getElementById('fillLast').addEventListener('click',function(){
+  fillLastBarOnly=!fillLastBarOnly; this.classList.toggle('on',fillLastBarOnly);
+  toast(fillLastBarOnly?'Les fills s\u2019\u00e9crivent sur la derni\u00e8re mesure'
+                       :'Les fills s\u2019\u00e9crivent sur tout le pattern'); });
+document.getElementById('fillLast').classList.add('on');
+function fillRange(){
+  const len=patLens[curPat];
+  return fillLastBarOnly ? [Math.max(0,len-4),len] : [0,len];
+}
+function writeFill(kind){
+  pushUndo(true);
+  const [a,z]=fillRange(), len=patLens[curPat];
+  const sn=TRACKS.findIndex(x=>x.sound==='snare');
+  const kk=TRACKS.findIndex(x=>x.sound==='kick');
+  const ht=TRACKS.findIndex(x=>x.sound==='hat');
+  if(sn<0) { toast('Aucune piste de caisse claire'); return; }
+  for(let s=a;s<z;s++){
+    if(kind==='roll'){                    /* accélération progressive */
+      const p=(s-a)/Math.max(1,z-a-1);
+      pattern[sn][s]= p<0.35 ? (s%2===0?2:0) : p<0.75 ? 2 : 3;
+      if(kk>=0 && s>a) pattern[kk][s]=0;
+      if(ht>=0) pattern[ht][s]=0;
+    } else if(kind==='stutter'){          /* trois coups serrés puis silence */
+      const m=(s-a)%4;
+      pattern[sn][s]= m===0?3 : m===1?1 : m===2?2 : 0;
+    } else if(kind==='trip'){             /* triolets : un pas sur trois accentué */
+      pattern[sn][s]= ((s-a)%3===0)?3:1;
+      if(ht>=0) pattern[ht][s]=((s-a)%3===0)?0:1;
+    }
+  }
+  buildGrid(); scheduleAutosave();
+  toast('Fill '+(kind==='roll'?'roulement':kind==='stutter'?'stutter':'triolets')
+    +' \u00e9crit sur '+(fillLastBarOnly?'la derni\u00e8re mesure':'le pattern')+' \u2014 \u21ba pour revenir');
+}
+document.getElementById('fillRoll').addEventListener('click',()=>writeFill('roll'));
+document.getElementById('fillStut').addEventListener('click',()=>writeFill('stutter'));
+document.getElementById('fillTrip').addEventListener('click',()=>writeFill('trip'));
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
