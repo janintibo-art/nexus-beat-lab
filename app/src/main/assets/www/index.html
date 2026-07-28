@@ -498,6 +498,10 @@
     <span>&#128295; SOUND LAB <small>sculptez le son de chaque piste du s&eacute;quenceur</small></span>
     <span style="flex:1"></span>
     <button class="btn green" id="labTest">&#9654; TESTER</button>
+    <button class="btn" id="trkAdd">+ PISTES AUDIO</button>
+    <button class="btn" id="trkRen">RENOMMER</button>
+    <button class="btn red" id="trkDel">&#10005; SUPPRIMER</button>
+    <input type="file" id="trkFiles" accept="audio/*" multiple style="display:none">
     <button class="btn" data-win="studio">&#8592; STUDIO</button>
   </div>
   <div class="panel" style="padding:14px">
@@ -529,7 +533,8 @@
         </div>
       </div>
     </div>
-    <p class="labhint">Chaque piste a sa tranche compl&egrave;te : pitch, filtre, decay, volume, panoramique, mute/solo et &eacute;galiseur 3 bandes &mdash; le tout reproduit &agrave; l'export. Double-tap sur un potentiom&egrave;tre pour le remettre &agrave; z&eacute;ro.</p>
+    <p class="labhint">Chaque piste a sa tranche compl&egrave;te : pitch, filtre, decay, volume, panoramique, mute/solo et &eacute;galiseur 3 bandes &mdash; le tout reproduit &agrave; l'export.
+    <b>+ PISTES AUDIO</b> importe un ou plusieurs fichiers d'un coup : chacun devient une piste jouable dans le s&eacute;quenceur (jusqu'&agrave; 16). Double-tap sur un potentiom&egrave;tre pour le remettre &agrave; z&eacute;ro.</p>
   </div>
 </div>
 
@@ -990,7 +995,7 @@ const SOUNDS = {
 };
 
 /* ---------- pistes du séquenceur ---------- */
-const TRACKS = [
+let TRACKS = [
   {name:'KICK',  sound:'kick',  color:'var(--orange)'},
   {name:'SNARE', sound:'snare', color:'var(--pink)'},
   {name:'CLAP',  sound:'clap',  color:'var(--pink)'},
@@ -998,10 +1003,15 @@ const TRACKS = [
   {name:'BASS',  sound:'bass',  color:'var(--cyan)'},
   {name:'PERC',  sound:'perc1', color:'var(--cyan)'},
 ];
+const MAXTRACKS=16;
+const TRACK_COLORS=['#ff9a2e','#ff2e88','#a04dff','#2ee6ff','#39d98a','#ffd83a','#ff6a3d','#8c9eff',
+                    '#ff5ecb','#7bff9e','#ffb454','#5ec8ff','#c58cff','#ff8a8a','#9dff5e','#5effe0'];
+let userBufs={};              // buffers des pistes ajoutées par l'utilisateur (clé = id)
+let tidSeq=0;
 const VELS=[0,0.45,0.8,1.0];   /* 0 vide, 1 doux, 2 normal, 3 accent (comme Studio Tibo) */
 /* tranche de console par piste : gain → EQ 3 bandes → panoramique → master */
 const trackGains=[], trackEQ=[], trackPan=[];
-TRACKS.forEach(()=>{
+function makeStrip(){
   const g=AC.createGain(); g.gain.value=0.85;
   const lo=AC.createBiquadFilter(); lo.type='lowshelf';  lo.frequency.value=200;
   const md=AC.createBiquadFilter(); md.type='peaking';   md.frequency.value=1000; md.Q.value=0.9;
@@ -1009,7 +1019,8 @@ TRACKS.forEach(()=>{
   const pn=AC.createStereoPanner ? AC.createStereoPanner() : AC.createGain();
   g.connect(lo); lo.connect(md); md.connect(hi); hi.connect(pn); pn.connect(master);
   trackGains.push(g); trackEQ.push({lo,md,hi}); trackPan.push(pn);
-});
+}
+TRACKS.forEach(makeStrip);
 const trackMute  = TRACKS.map(()=>false);
 const trackSolo  = TRACKS.map(()=>false);
 const anySolo=()=>trackSolo.some(Boolean);
@@ -1018,8 +1029,10 @@ const audible=ti=>!trackMute[ti]&&(!anySolo()||trackSolo[ti]);
 /* ---------- 8 patterns + chaîne du mode SONG ---------- */
 const NPAT=8, MAXSTEPS=32;
 function emptyPat(){ return TRACKS.map(()=>Array(MAXSTEPS).fill(0)); }
-function pad32(rows){ return rows.map(r=>{ const a=r.slice(0,MAXSTEPS).map(v=>v===true?2:(+v||0));
-  while(a.length<MAXSTEPS) a.push(0); return a; }); }
+function pad32(rows){ const out=rows.map(r=>{ const a=r.slice(0,MAXSTEPS).map(v=>v===true?2:(+v||0));
+    while(a.length<MAXSTEPS) a.push(0); return a; });
+  while(out.length<TRACKS.length) out.push(Array(MAXSTEPS).fill(0));   /* pistes ajoutées */
+  return out; }
 let patterns = Array.from({length:NPAT}, emptyPat);
 let patLens = Array(NPAT).fill(16);       // 8, 16 ou 32 pas par pattern
 let bassLines = Array.from({length:NPAT},()=>Array(MAXSTEPS).fill(null)); // notes du piano roll
@@ -1095,16 +1108,17 @@ function playSound(name,t,out,rate){
 
 /* ---------- SOUND LAB : paramètres de son par piste ---------- */
 const sndParams = TRACKS.map(()=>({semi:0, cutoff:1, decay:1, gain:1, keep:false}));
+function defParams(){ return {semi:0, cutoff:1, decay:1, gain:1, keep:false}; }
 function playTrack(ti,t,out,vel){
   out = out || trackGains[ti];
   vel = (vel===undefined) ? 1 : vel;
-  const C=out.context, name=TRACKS[ti].sound, p=sndParams[ti];
-  const b=kitBuf[name];
+  const C=out.context, trk=TRACKS[ti], name=trk.sound, p=sndParams[ti];
+  const b = trk.uid ? userBufs[trk.uid] : kitBuf[name];
   if(!b){ if(SOUNDS[name]) SOUNDS[name](t,out); return; }
   const s=C.createBufferSource();
   const rate=Math.pow(2,p.semi/12);
   /* mode KEEP : compense l'étirement dû au pitch pour garder la durée d'origine */
-  s.buffer = p.keep ? stretched(C,b,name+'|'+kitIdx,rate) : b;
+  s.buffer = p.keep ? stretched(C,b,(trk.uid?('u'+trk.uid):(name+'|'+kitIdx)),rate) : b;
   if(rate!==1) s.playbackRate.value=rate;
   let node=s;
   if(p.cutoff<0.99){ const f=C.createBiquadFilter(); f.type='lowpass';
@@ -1456,25 +1470,29 @@ makeKnob(document.getElementById('pitchKnob'),document.getElementById('pitchVal'
 
 /* ---------- mixeur ---------- */
 const mixer=document.getElementById('mixer');
-const mixCaps=[];
-TRACKS.forEach((trk,ti)=>{
+let mixCaps=[];
+function buildMixerUI(){
+ mixer.innerHTML=''; mixCaps=[];
+ TRACKS.forEach((trk,ti)=>{
   const ch=document.createElement('div'); ch.className='chan';
   const f=document.createElement('div'); f.className='fader'; f.style.setProperty('--fc',trk.color);
   f.innerHTML='<div class="rail"></div><div class="cap"></div>';
   const cap=f.querySelector('.cap'); mixCaps.push(cap);
   function render(v){ cap.style.bottom=(8+v*(130-32))+'px'; trackGains[ti].gain.value=v;
     try{ if(winIsOpen('lab')&&selTrack===ti) kLabVol.set(v); }catch(e){} }
-  let v=0.85, y0=0, v0=0;
+  let v=trackGains[ti].gain.value, y0=0, v0=0;
   f.addEventListener('pointerdown',e=>{ e.preventDefault(); y0=e.clientY;v0=v; f.setPointerCapture(e.pointerId); });
   f.addEventListener('pointermove',e=>{ if(!e.buttons) return;
     v=Math.min(1,Math.max(0,v0+(y0-e.clientY)/110)); render(v); });
   render(v);
   const lab=document.createElement('label'); lab.textContent=trk.name; lab.style.color=trk.color;
   ch.appendChild(f); ch.appendChild(lab); mixer.appendChild(ch);
-});
+ });
+}
+buildMixerUI();
 /* le fader suit quand le volume change ailleurs (sound lab, import de projet) */
-function syncMixer(){ mixCaps.forEach((cap,ti)=>
-  cap.style.bottom=(8+trackGains[ti].gain.value*(130-32))+'px'); }
+function syncMixer(){ mixCaps.forEach((cap,ti)=>{ if(trackGains[ti])
+  cap.style.bottom=(8+trackGains[ti].gain.value*(130-32))+'px'; }); }
 
 /* ================== FENÊTRES / MODULES ================== */
 function winIsOpen(w){ const el=document.getElementById('win-'+w);
@@ -1718,14 +1736,18 @@ function labSync(){
   document.getElementById('labSolo').classList.toggle('on',trackSolo[ti]);
   drawLabEq();
 }
-TRACKS.forEach((trk,ti)=>{
-  const b=document.createElement('button');
-  b.className='btn'+(ti===0?' on':''); b.textContent=trk.name; b.style.color=trk.color;
-  b.addEventListener('click',()=>{ selTrack=ti;
-    [...labtracks.children].forEach((x,j)=>x.classList.toggle('on',j===ti));
-    labSync(); });
-  labtracks.appendChild(b);
-});
+function buildLabTracks(){
+  labtracks.innerHTML='';
+  TRACKS.forEach((trk,ti)=>{
+    const b=document.createElement('button');
+    b.className='btn'+(ti===selTrack?' on':''); b.textContent=trk.name; b.style.color=trk.color;
+    b.addEventListener('click',()=>{ selTrack=ti;
+      [...labtracks.children].forEach((x,j)=>x.classList.toggle('on',j===ti));
+      labSync(); });
+    labtracks.appendChild(b);
+  });
+}
+buildLabTracks();
 const kLabPit=makeKnob(document.getElementById('labPitK'),document.getElementById('labPitV'),
   0.5,v=>sndParams[selTrack].semi=Math.round(v*24-12),
   v=>{const s=Math.round(v*24-12);return (s>0?'+':'')+s;});
@@ -1969,7 +1991,8 @@ function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bass
   autoData, autoOn, mst:{...mst},
   wt:{...wt}, synthEngine, sat:{...sat}, tape:{...tape}, mod:{...mod}, pump:{...pump},
   fx:{...fx}, swing, kitIdx, clips, plLen, plActive,
-  scale:{root:scaleRoot,key:scaleKey,snap:scaleSnap}}; }
+  scale:{root:scaleRoot,key:scaleKey,snap:scaleSnap},
+  tracks:TRACKS.map(t=>({name:t.name,sound:t.sound,color:t.color,uid:t.uid||0}))}; }
 function applyProject(d){
   setBpm(d.bpm||128);
   if(d.patterns){ patterns=d.patterns.map(p=>pad32(p)); }
@@ -2002,6 +2025,24 @@ function applyProject(d){
     [...document.getElementById('tapeDivs').children].forEach((x,j)=>x.classList.toggle('on',j===tape.div));
     [...document.getElementById('modModes').children].forEach((x,j)=>x.classList.toggle('on',j===mod.mode));
     [...document.getElementById('pumpRates').children].forEach((x,j)=>x.classList.toggle('on',j===pump.rate)); }
+  if(d.tracks && d.tracks.length!==TRACKS.length){
+    /* ajuste le nombre de pistes ; les pistes audio importées gardent leur son si présent */
+    while(TRACKS.length>d.tracks.length){
+      const i=TRACKS.length-1;
+      try{ trackPan[i].disconnect(); }catch(e){}
+      TRACKS.pop(); trackGains.pop(); trackEQ.pop(); trackPan.pop();
+      trackMute.pop(); trackSolo.pop(); sndParams.pop();
+    }
+    while(TRACKS.length<d.tracks.length){
+      const t=d.tracks[TRACKS.length];
+      TRACKS.push({name:t.name,sound:t.sound||'kick',color:t.color,uid:t.uid||0});
+      makeStrip(); trackMute.push(false); trackSolo.push(false); sndParams.push(defParams());
+    }
+    d.tracks.forEach((t,i)=>{ TRACKS[i].name=t.name; TRACKS[i].color=t.color;
+      TRACKS[i].sound=t.sound||TRACKS[i].sound; TRACKS[i].uid=t.uid||0; });
+    selTrack=Math.min(selTrack,TRACKS.length-1);
+    if(typeof rebuildTrackUI==='function') rebuildTrackUI();
+  }
   if(d.chan) d.chan.forEach((c,ti)=>{ if(ti>=TRACKS.length) return;
     trackGains[ti].gain.value=c.g;
     if(trackPan[ti].pan) trackPan[ti].pan.value=c.pan||0;
@@ -3206,6 +3247,62 @@ document.getElementById('sampFit').addEventListener('click',()=>{
     'cal\u00e9 sur '+sampBars+' mesure'+(sampBars>1?'s':'')+' \u00e0 '+bpm.toFixed(0)+' BPM \u2014 '
     +sampleBuf.duration.toFixed(2)+' s';
   toast('Sample cal\u00e9 au tempo (\u00d7'+r.factor.toFixed(3)+', hauteur inchang\u00e9e)');
+});
+
+/* ================== PISTES DYNAMIQUES ================== */
+function rebuildTrackUI(){
+  buildGrid();
+  if(typeof buildMixerUI==='function') buildMixerUI();
+  if(typeof buildLabTracks==='function') buildLabTracks();
+  if(winIsOpen('perf')) renderPerform();
+}
+function addSampleTrack(name,buf){
+  if(TRACKS.length>=MAXTRACKS){ toast('Maximum '+MAXTRACKS+' pistes atteint'); return false; }
+  const uid=++tidSeq;
+  userBufs[uid]=buf;
+  TRACKS.push({name:name.slice(0,10).toUpperCase(), sound:'kick', uid,
+    color:TRACK_COLORS[TRACKS.length%TRACK_COLORS.length]});
+  makeStrip();
+  trackMute.push(false); trackSolo.push(false);
+  sndParams.push(defParams());
+  patterns.forEach(p=>p.push(Array(MAXSTEPS).fill(0)));
+  return true;
+}
+function removeTrack(ti){
+  if(TRACKS.length<=1){ toast('Il faut au moins une piste'); return; }
+  pushUndo(true);
+  const trk=TRACKS[ti];
+  if(trk.uid) delete userBufs[trk.uid];
+  try{ trackPan[ti].disconnect(); }catch(e){}
+  TRACKS.splice(ti,1); trackGains.splice(ti,1); trackEQ.splice(ti,1); trackPan.splice(ti,1);
+  trackMute.splice(ti,1); trackSolo.splice(ti,1); sndParams.splice(ti,1);
+  patterns.forEach(p=>p.splice(ti,1));
+  selTrack=Math.min(selTrack,TRACKS.length-1);
+  rebuildTrackUI(); scheduleAutosave();
+  toast('Piste supprim\u00e9e');
+}
+document.getElementById('trkAdd').addEventListener('click',()=>
+  document.getElementById('trkFiles').click());
+document.getElementById('trkFiles').addEventListener('change',async e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  resume(); pushUndo(true);
+  let ok=0;
+  for(const f of files){
+    try{ const buf=await AC.decodeAudioData(await f.arrayBuffer());
+      if(addSampleTrack(f.name.replace(/\.[^.]+$/,''),buf)) ok++; }
+    catch(err){}
+  }
+  rebuildTrackUI(); scheduleAutosave();
+  toast(ok ? ok+' piste'+(ok>1?'s':'')+' ajout\u00e9e'+(ok>1?'s':'')
+           : 'Aucun fichier audio lisible');
+  e.target.value='';
+});
+document.getElementById('trkDel').addEventListener('click',()=>removeTrack(selTrack));
+document.getElementById('trkRen').addEventListener('click',()=>{
+  const n=prompt('Nouveau nom de la piste :',TRACKS[selTrack].name);
+  if(!n) return;
+  pushUndo(true); TRACKS[selTrack].name=n.slice(0,10).toUpperCase();
+  rebuildTrackUI(); scheduleAutosave();
 });
 
 /* ---------- vumètre ---------- */
