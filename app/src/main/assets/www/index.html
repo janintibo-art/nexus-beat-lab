@@ -173,6 +173,12 @@
   .prcell.tail{opacity:.55;}
   .prcell.on.pv1{opacity:.5;}
   .prcell.on.pv3{box-shadow:0 0 14px rgba(46,230,255,.8);border-color:#fff;}
+  #prtools2{display:flex;align-items:center;gap:10px;padding:0 0 10px;}
+  .prsel{background:var(--inset);color:var(--txt);border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-size:11px;font-weight:700;box-shadow:inset 0 2px 5px rgba(0,0,0,.6);}
+  .prcell.outscale{opacity:.42;}
+  .prcell.root{background:#2a2a38;border-color:#4d4d63;}
+  .prkey.inscale{box-shadow:inset 3px 0 0 var(--cyan);}
   #prkeys{display:grid;grid-auto-rows:22px;width:56px;gap:1px;}
   .prkey{font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;
     background:#dfdfe6;color:#222;border-radius:3px 0 0 3px;}
@@ -453,6 +459,16 @@
       <span class="prtlbl">MODE</span><div id="prmodes"></div>
       <span class="prtlbl">DUR&Eacute;E</span><div id="prdurs"></div>
       <span class="prtlbl">V&Eacute;LOCIT&Eacute;</span><div id="prvels"></div>
+    </div>
+    <div id="prtools2">
+      <span class="prtlbl">GAMME</span>
+      <select id="prRoot" class="prsel"></select>
+      <select id="prScale" class="prsel"></select>
+      <button class="btn" id="prSnap">AIMANT</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="prInspire">&#10024; INSPIRATION</button>
+      <button class="btn" id="prMelo">&#127925; M&Eacute;LODIE</button>
+      <button class="btn" id="prClearNotes">&#10005; NOTES</button>
     </div>
     <div id="proll"><div id="prkeys"></div><div id="prgrid"></div></div>
   </div>
@@ -1497,6 +1513,42 @@ PRMODES.forEach((m,i)=>{ const b=document.createElement('button');
   b.addEventListener('click',()=>{ prMode=m.id;
     [...prmodesEl.children].forEach((x,j)=>x.classList.toggle('on',j===i)); });
   prmodesEl.appendChild(b); });
+/* ---------- GAMMES : éclairage du piano roll + aimant (esprit Studio Tibo) ---------- */
+const SCALES={
+  min:  {label:'Mineure',         iv:[0,2,3,5,7,8,10]},
+  maj:  {label:'Majeure',         iv:[0,2,4,5,7,9,11]},
+  hmin: {label:'Min. harmonique', iv:[0,2,3,5,7,8,11]},
+  dor:  {label:'Dorien',          iv:[0,2,3,5,7,9,10]},
+  phry: {label:'Phrygien',        iv:[0,1,3,5,7,8,10]},
+  pmin: {label:'Penta mineure',   iv:[0,3,5,7,10]},
+  pmaj: {label:'Penta majeure',   iv:[0,2,4,7,9]},
+  blues:{label:'Blues',           iv:[0,3,5,6,7,10]},
+  chrom:{label:'Chromatique',     iv:[0,1,2,3,4,5,6,7,8,9,10,11]},
+};
+let scaleRoot=0, scaleKey='min', scaleSnap=false;
+const inScale=p=>SCALES[scaleKey].iv.includes(((p-scaleRoot)%12+12)%12);
+function snapToScale(p){
+  if(inScale(p)) return p;
+  for(let d=1;d<7;d++){
+    if(p-d>=0 && inScale(p-d)) return p-d;
+    if(p+d<PR_ROWS && inScale(p+d)) return p+d;
+  }
+  return p;
+}
+const maybeSnap=p=>scaleSnap?snapToScale(p):p;
+const prRootSel=document.getElementById('prRoot'), prScaleSel=document.getElementById('prScale');
+NOTE_NAMES.forEach((n,i)=>{ const o=document.createElement('option');
+  o.value=i; o.textContent=n; prRootSel.appendChild(o); });
+Object.keys(SCALES).forEach(k=>{ const o=document.createElement('option');
+  o.value=k; o.textContent=SCALES[k].label; prScaleSel.appendChild(o); });
+prScaleSel.value='min';
+prRootSel.addEventListener('change',()=>{ scaleRoot=+prRootSel.value; renderPiano(); });
+prScaleSel.addEventListener('change',()=>{ scaleKey=prScaleSel.value; renderPiano(); });
+document.getElementById('prSnap').addEventListener('click',function(){
+  scaleSnap=!scaleSnap; this.classList.toggle('on',scaleSnap);
+  toast(scaleSnap?'Aimant actif : vos notes tombent dans la gamme'
+                 :'Aimant d\u00e9sactiv\u00e9 : toutes les notes sont libres'); });
+
 const PR_DURS=[1,2,4,8], PR_VELS=[0.5,0.85,1.0];
 let prDur=1, prVel=1;
 const prdursEl=document.getElementById('prdurs'), prvelsEl=document.getElementById('prvels');
@@ -1516,7 +1568,8 @@ function noteArr(v){ if(v===null||v===undefined) return [];
   return (Array.isArray(v)?v:[v]).map(normNote); }
 function pitches(v){ return noteArr(v).map(n=>n.p); }
 function placeNotes(line,c,semi,len){
-  const ivs=CHORDS[prChord].iv.filter(iv=>semi+iv<PR_ROWS);
+  let ivs=CHORDS[prChord].iv.filter(iv=>semi+iv<PR_ROWS);
+  if(scaleSnap) ivs=ivs.map(iv=>snapToScale(semi+iv)-semi);
   if(prMode==='bloc'){
     line[c]=ivs.map(iv=>({p:semi+iv,d:prDur,v:prVel}));
     ivs.forEach(iv=>playSynth(semi+iv,AC.currentTime));
@@ -1538,7 +1591,7 @@ function renderPiano(){
   for(let r=0;r<PR_ROWS;r++){
     const semi=PR_ROWS-1-r, nm=NOTE_NAMES[semi%12];
     const k=document.createElement('div');
-    k.className='prkey'+(nm.includes('#')?' blk':'');
+    k.className='prkey'+(nm.includes('#')?' blk':'')+(inScale(semi)?' inscale':'');
     k.textContent=nm+(1+Math.floor(semi/12));
     prkeys.appendChild(k);
   }
@@ -1546,7 +1599,9 @@ function renderPiano(){
     const semi=PR_ROWS-1-r, isBlk=NOTE_NAMES[semi%12].includes('#');
     for(let c=0;c<len;c++){
       const cell=document.createElement('div');
-      cell.className='prcell'+(Math.floor(c/4)%2===0?' q':'')+(isBlk?' blkrow':'');
+      const isRoot=((semi-scaleRoot)%12+12)%12===0;
+      cell.className='prcell'+(Math.floor(c/4)%2===0?' q':'')+(isBlk?' blkrow':'')
+        +(inScale(semi)?'':' outscale')+(isRoot?' root':'');
       cell.dataset.pc=c;
       const here=noteArr(line[c]).find(n=>n.p===semi);
       if(here) cell.classList.add('on','pv'+(here.v+1));
@@ -1561,7 +1616,7 @@ function renderPiano(){
         if(cur.some(n=>n.p===semi)){
           const left=cur.filter(n=>n.p!==semi);
           line[c]=left.length?left:null;
-        } else placeNotes(line,c,semi,len);
+        } else placeNotes(line,c,maybeSnap(semi),len);
         renderPiano(); });
       prgrid.appendChild(cell);
     }
@@ -1900,7 +1955,8 @@ function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bass
     m:trackMute[ti], s:trackSolo[ti]})),
   autoData, autoOn, mst:{...mst},
   wt:{...wt}, synthEngine, sat:{...sat}, tape:{...tape}, mod:{...mod}, pump:{...pump},
-  fx:{...fx}, swing, kitIdx, clips, plLen, plActive}; }
+  fx:{...fx}, swing, kitIdx, clips, plLen, plActive,
+  scale:{root:scaleRoot,key:scaleKey,snap:scaleSnap}}; }
 function applyProject(d){
   setBpm(d.bpm||128);
   if(d.patterns){ patterns=d.patterns.map(p=>pad32(p)); }
@@ -1948,6 +2004,10 @@ function applyProject(d){
   if(d.clips&&typeof renderPl==='function'){
     document.getElementById('plMode').classList.toggle('on',plActive);
     document.getElementById('plLen').textContent=plLen+' MESURES'; renderPl(); }
+  if(d.scale){ scaleRoot=d.scale.root||0; scaleKey=SCALES[d.scale.key]?d.scale.key:'min';
+    scaleSnap=!!d.scale.snap;
+    prRootSel.value=scaleRoot; prScaleSel.value=scaleKey;
+    document.getElementById('prSnap').classList.toggle('on',scaleSnap); }
   if(typeof d.swing==='number'){ swing=d.swing; kSwing.set(swing); }
   if(d.fx){ Object.assign(fx,d.fx); applyFx();
     document.getElementById('fxDist').classList.toggle('on',fx.dist);
@@ -2714,7 +2774,7 @@ function midiNoteOn(note,vel){ resume();
     if(bank==='A'){ const el=padgrid.children[i];
       if(el){ el.classList.add('hit'); setTimeout(()=>el.classList.remove('hit'),100); } }
   } else {
-    const semi=Math.max(0,Math.min(PR_ROWS-1,note-24));
+    const semi=maybeSnap(Math.max(0,Math.min(PR_ROWS-1,note-24)));
     if(midiTarget==='wave') playWaveNote(semi,AC.currentTime);
     else playBassNote(semi,AC.currentTime);
     if(recording && playing){                    // écriture dans le piano roll
@@ -2792,7 +2852,7 @@ function mkClips(){ const c=Array.from({length:NPAT},()=>Array(64).fill(false));
   return c; }
 const PRESETS=[
  {name:'HOUSE', desc:'124 BPM \u00b7 kit 909 \u00b7 pompage sidechain, basse offbeat',
-  data:{bpm:124, swing:0.12, kitIdx:1, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
+  data:{scale:{root:9,key:'min',snap:false}, bpm:124, swing:0.12, kitIdx:1, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
     [[3,0,0,0,3,0,0,0,3,0,0,0,3,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
      [0,0,0,0,3,0,0,0,0,0,0,0,3,0,0,0],[0,0,2,0,0,0,2,0,0,0,2,0,0,0,2,0],
@@ -2805,7 +2865,7 @@ const PRESETS=[
    pump:{on:true,rate:0,depth:0.65,rel:0.35},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:true,revMix:0.18}}},
  {name:'HARDTEK', desc:'175 BPM \u00b7 kick tribe, saturation tube, acid line',
-  data:{bpm:175, swing:0, kitIdx:3, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
+  data:{scale:{root:9,key:'phry',snap:false}, bpm:175, swing:0, kitIdx:3, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
     [[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
      [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
@@ -2818,7 +2878,7 @@ const PRESETS=[
    sat:{on:true,style:1,drive:0.4,tone:0.6,mix:0.55,out:0.5},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:false,revMix:0.3}}},
  {name:'DRUM & BASS', desc:'174 BPM \u00b7 break rapide, basse profonde, tape delay',
-  data:{bpm:174, swing:0.08, kitIdx:5, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
+  data:{scale:{root:0,key:'min',snap:false}, bpm:174, swing:0.08, kitIdx:5, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
     [[1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1],
@@ -2831,7 +2891,7 @@ const PRESETS=[
    tape:{on:true,div:0,fb:0.5,tone:0.5,wow:0.15,mix:0.22,ping:true},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:true,revMix:0.15}}},
  {name:'BOOM BAP', desc:'90 BPM \u00b7 swing prononc\u00e9, chaleur 808, t\u00eate qui hoche',
-  data:{bpm:90, swing:0.42, kitIdx:0, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
+  data:{scale:{root:0,key:'dor',snap:false}, bpm:90, swing:0.42, kitIdx:0, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
     [[1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],
@@ -3007,6 +3067,68 @@ document.getElementById('plClear').addEventListener('click',()=>{
   renderPl(); toast('Playlist vid\u00e9e'); });
 document.getElementById('plPlay').addEventListener('click',()=>{
   playing?stop():play(); renderPl(); });
+
+/* ---------- ✨ INSPIRATION : générateur euclidien + mélodie dans la gamme ---------- */
+function euclid(k,n){
+  const out=[]; let acc=0;
+  for(let i=0;i<n;i++){ acc+=k; if(acc>=n){acc-=n;out.push(true);} else out.push(false); }
+  return out;
+}
+function genDrums(){
+  pushUndo(true);
+  const len=patLens[curPat], R=Math.random, pat=patterns[curPat];
+  const put=(ti,arr)=>{ for(let s=0;s<MAXSTEPS;s++)
+    pat[ti][s]= s<len ? (arr[s%arr.length] ? (R()<0.25?1:(R()<0.35?3:2)) : 0) : 0; };
+  const q=Math.max(4,len/4);
+  /* kick : euclidien 3 à 5 impulsions sur la moitié de la grille, doublé */
+  const kb=euclid(3+Math.floor(R()*3),Math.round(len/2));
+  put(0,kb.concat(kb));
+  /* snare : temps 2 et 4, parfois une relance */
+  const sn=Array(len).fill(false);
+  for(let s=Math.round(len/4);s<len;s+=Math.round(len/2)) sn[s]=true;
+  if(R()<0.35) sn[len-2]=true;
+  put(1,sn);
+  /* clap : renfort de la snare ou contretemps */
+  const cl=Array(len).fill(false);
+  if(R()<0.6) cl[Math.round(len*0.75)]=true;
+  if(R()<0.5) cl[len-1]=true;
+  put(2,cl);
+  /* hat : croches ou doubles, avec des trous */
+  const every=R()<0.5?1:2;
+  put(3,Array.from({length:len},(_,i)=>i%every===0 && R()>0.15));
+  /* bass drum secondaire et perc : euclidiens contrastés */
+  put(4,euclid(2+Math.floor(R()*3),len));
+  put(5,euclid(3+Math.floor(R()*4),len).map(v=>v&&R()>0.35));
+  buildGrid();
+}
+function genMelody(){
+  pushUndo(true);
+  const len=patLens[curPat], R=Math.random;
+  const iv=SCALES[scaleKey].iv, line=bassLines[curPat];
+  for(let s=0;s<MAXSTEPS;s++) line[s]=null;
+  /* marche aléatoire bornée sur les degrés de la gamme */
+  let deg=Math.floor(R()*iv.length), oct=1;
+  const grid=[1,2,2,4][Math.floor(R()*4)];        // densité rythmique
+  for(let s=0;s<len;s+=grid){
+    if(R()<0.22) continue;                        // silences = respiration
+    deg+=Math.floor(R()*5)-2;
+    if(deg<0){ deg+=iv.length; oct=Math.max(0,oct-1); }
+    if(deg>=iv.length){ deg-=iv.length; oct=Math.min(2,oct+1); }
+    const p=Math.min(PR_ROWS-1,scaleRoot+iv[deg]+oct*12);
+    const d=(R()<0.3?grid*2:grid);
+    line[s]=[{p,d,v:R()<0.25?2:1}];
+  }
+  renderPiano();
+}
+document.getElementById('prInspire').addEventListener('click',()=>{ resume();
+  genDrums(); genMelody();
+  toast('\u2728 Nouveau pattern g\u00e9n\u00e9r\u00e9 dans la gamme \u2014 \u21ba pour revenir'); });
+document.getElementById('prMelo').addEventListener('click',()=>{ resume();
+  genMelody(); toast('\ud83c\udfb5 Nouvelle m\u00e9lodie'); });
+document.getElementById('prClearNotes').addEventListener('click',()=>{
+  pushUndo(true);
+  for(let s=0;s<MAXSTEPS;s++) bassLines[curPat][s]=null;
+  renderPiano(); toast('Notes effac\u00e9es'); });
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
