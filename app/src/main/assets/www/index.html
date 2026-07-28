@@ -576,6 +576,9 @@
         <button class="btn" id="loadSample">&#128194; CHARGER UN AUDIO</button>
         <button class="btn" id="sampFit">&#9202; CALER AU TEMPO</button>
         <button class="btn" id="sampBars">4 MESURES</button>
+        <button class="btn" id="sampDetect">&#9986; D&Eacute;TECTER LES COUPES</button>
+        <button class="btn" id="sampMode">TRANCHES &Eacute;GALES</button>
+        <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="sampSensK"></div><label>SENSIBILIT&Eacute;</label><div class="kv" id="sampSensV">50</div></div>
         <input type="file" id="sampleFile" accept="audio/*" style="display:none">
       </div>
       <div class="foldbody">
@@ -938,7 +941,7 @@
       <span class="edsep"></span>
       <button class="btn" id="edUndo">&#8630; ANNULER</button>
     </div>
-    <p class="labhint">Les modifications du SAMPLE mettent &agrave; jour les 16 tranches et la banque B des pads. Les modifications d'une PISTE audio s'entendent d&egrave;s la prochaine lecture et dans l'export. Sans s&eacute;lection, le traitement s'applique &agrave; tout le fichier.</p>
+    <p class="labhint">Les modifications du SAMPLE mettent &agrave; jour les tranches et la banque B des pads. Les modifications d'une PISTE audio s'entendent d&egrave;s la prochaine lecture et dans l'export. Sans s&eacute;lection, le traitement s'applique &agrave; tout le fichier.</p>
   </div>
 </div>
 <div class="modwin" id="win-rack">
@@ -1462,8 +1465,9 @@ function playBassNote(semi,t,out,dur,vel){
 document.getElementById('kitPrev').addEventListener('click',()=>{ resume(); loadKit(kitIdx-1); });
 document.getElementById('kitNext').addEventListener('click',()=>{ resume(); loadKit(kitIdx+1); });
 
-/* ---------- sampler : chargement, forme d'onde, 16 tranches ---------- */
+/* ---------- sampler : chargement, forme d'onde, tranches ---------- */
 let sampleBuf=null;
+let sliceMarks=null;   /* positions de coupe détectées, ou null = 16 tranches égales */
 const SLICE_COLORS=['#ff9a2e','#ff9a2e','#ff9a2e','#ff9a2e','#ff2e88','#ff2e88','#ff2e88','#ff2e88',
                     '#a04dff','#a04dff','#a04dff','#a04dff','#2ee6ff','#2ee6ff','#2ee6ff','#2ee6ff'];
 const waveCv=document.getElementById('wave'), wctx=waveCv.getContext('2d');
@@ -1472,12 +1476,16 @@ function playSlice(i,t,rate){ if(!sampleBuf) return; t=t||AC.currentTime; rate=r
   const s=AC.createBufferSource(); s.buffer=sampleBuf;
   if(rate!==1) s.playbackRate.value=rate;
   const g=AC.createGain(); g.gain.value=0.9; s.connect(g).connect(master);
-  const dur=sampleBuf.duration/16; s.start(t,i*dur); s.stop(t+dur/rate);
+  const [off,dur]=sliceBounds(i);
+  s.start(t,off); s.stop(t+dur/rate);
   const el=slicesEl.children[i];
   if(el){ el.classList.add('playing'); setTimeout(()=>el.classList.remove('playing'),Math.min(400,dur*1000)); } }
+function nSlices(){ return (sliceMarks&&sliceMarks.length)?sliceMarks.length:16; }
 function buildSlices(){
   slicesEl.innerHTML='';
-  for(let i=0;i<16;i++){
+  const N=nSlices();
+  slicesEl.style.gridTemplateColumns='repeat('+N+',1fr)';
+  for(let i=0;i<N;i++){
     const s=document.createElement('div'); s.className='slice'+(sampleBuf?'':' off');
     const col=SLICE_COLORS[i]; s.style.setProperty('--pc',col);
     if(sampleBuf) s.style.background=`linear-gradient(180deg, color-mix(in srgb,${col} 85%, #fff), color-mix(in srgb,${col} 60%, #000))`;
@@ -1497,13 +1505,26 @@ function drawWave(){
     for(let j=0;j<stepN;j++){ const v=data[x*stepN+j]||0; if(v<mn)mn=v; if(v>mx)mx=v; }
     wctx.moveTo(x+.5,(1+mn)*h/2); wctx.lineTo(x+.5,(1+mx)*h/2); }
   wctx.stroke();
-  wctx.strokeStyle='rgba(255,255,255,.16)';
-  for(let i=1;i<16;i++){ const x=Math.round(i*w/16)+.5;
-    wctx.beginPath(); wctx.moveTo(x,0); wctx.lineTo(x,h); wctx.stroke(); }
+  if(sliceMarks&&sliceMarks.length){
+    wctx.strokeStyle='rgba(255,46,136,.85)'; wctx.lineWidth=2;
+    sliceMarks.forEach((m,i)=>{ if(i===0) return;
+      const x=Math.round(m/sampleBuf.length*w)+.5;
+      wctx.beginPath(); wctx.moveTo(x,0); wctx.lineTo(x,h); wctx.stroke(); });
+    wctx.lineWidth=1;
+  } else {
+    wctx.strokeStyle='rgba(255,255,255,.16)';
+    for(let i=1;i<16;i++){ const x=Math.round(i*w/16)+.5;
+      wctx.beginPath(); wctx.moveTo(x,0); wctx.lineTo(x,h); wctx.stroke(); }
+  }
 }
 waveCv.addEventListener('pointerdown',e=>{ if(!sampleBuf) return;
-  const r=waveCv.getBoundingClientRect();
-  playSlice(Math.min(15,Math.floor((e.clientX-r.left)/r.width*16))); });
+  const r=waveCv.getBoundingClientRect(), p=(e.clientX-r.left)/r.width;
+  if(sliceMarks&&sliceMarks.length){
+    const pos=p*sampleBuf.length; let i=0;
+    while(i+1<sliceMarks.length && sliceMarks[i+1]<=pos) i++;
+    playSlice(i);
+  } else playSlice(Math.min(15,Math.floor(p*16)));
+});
 document.getElementById('loadSample').addEventListener('click',()=>document.getElementById('sampleFile').click());
 document.getElementById('sampleFile').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return; resume();
@@ -1511,6 +1532,9 @@ document.getElementById('sampleFile').addEventListener('change',async e=>{
     const arr=await f.arrayBuffer();
     sampleBuf=await AC.decodeAudioData(arr);
     document.getElementById('sampName').textContent=f.name+' \u2014 '+sampleBuf.duration.toFixed(2)+' s \u2014 16 tranches';
+    sliceMarks=null;
+    document.getElementById('sampMode').textContent='TRANCHES \u00c9GALES';
+    document.getElementById('sampMode').classList.remove('on');
     openFold('pSample'); drawWave(); buildSlices();
     toast('Sample charg\u00e9 : tranches jouables ici et sur la banque B des pads');
   }catch(err){ toast('Fichier audio non pris en charge'); }
@@ -4777,6 +4801,74 @@ function applyHumanize(){
         +' \u2014 \u21ba pour revenir' : 'Rien \u00e0 humaniser sur ce pattern');
 }
 document.getElementById('humApply').addEventListener('click',applyHumanize);
+
+/* ================== DÉTECTION DE TRANSITOIRES ==================
+   Analyse l'énergie par fenêtres courtes et repère les montées brusques :
+   ce sont les attaques (coups de batterie, débuts de notes). */
+let sampSens=0.5;
+function detectOnsets(buf,sens){
+  const sr=buf.sampleRate, d=buf.getChannelData(0);
+  const win=Math.round(sr*0.011), hop=Math.round(sr*0.0055);
+  const n=Math.floor((d.length-win)/hop);
+  if(n<8) return [];
+  /* enveloppe d'énergie par fenêtre */
+  const env=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    let s=0; const o=i*hop;
+    for(let k=0;k<win;k++){ const v=d[o+k]; s+=v*v; }
+    env[i]=Math.sqrt(s/win);
+  }
+  /* flux positif : on ne garde que les hausses d'énergie */
+  const flux=new Float32Array(n);
+  for(let i=1;i<n;i++) flux[i]=Math.max(0,env[i]-env[i-1]);
+  /* seuil adaptatif : moyenne locale + marge réglée par la sensibilité */
+  const half=14, marks=[];
+  const minGap=Math.round(sr*0.045/hop);         /* 45 ms mini entre deux coupes */
+  let last=-999;
+  const k=2.4-sens*1.9;                          /* sensible = seuil bas */
+  for(let i=2;i<n-1;i++){
+    let sum=0,c=0;
+    for(let j=Math.max(0,i-half);j<Math.min(n,i+half);j++){ sum+=flux[j]; c++; }
+    const thr=(sum/c)*k+0.0012;
+    if(flux[i]>thr && flux[i]>=flux[i-1] && flux[i]>=flux[i+1] && i-last>minGap){
+      marks.push(Math.max(0,i*hop-Math.round(sr*0.004)));   /* petit recul pour ne pas rogner l'attaque */
+      last=i;
+    }
+  }
+  if(!marks.length || marks[0]>sr*0.05) marks.unshift(0);
+  return marks;
+}
+function sliceBounds(i){
+  /* renvoie [début, durée] de la tranche i, en secondes */
+  if(!sampleBuf) return [0,0];
+  if(sliceMarks && sliceMarks.length){
+    const sr=sampleBuf.sampleRate, n=sliceMarks.length;
+    const a=sliceMarks[Math.min(i,n-1)];
+    const b=(i+1<n)?sliceMarks[i+1]:sampleBuf.length;
+    return [a/sr,(b-a)/sr];
+  }
+  const dur=sampleBuf.duration/16;
+  return [i*dur,dur];
+}
+document.getElementById('sampDetect').addEventListener('click',()=>{
+  if(!sampleBuf){ toast('Chargez d\u2019abord un audio'); return; }
+  const m=detectOnsets(sampleBuf,sampSens);
+  if(m.length<2){ toast('Aucune attaque nette trouv\u00e9e \u2014 montez la sensibilit\u00e9'); return; }
+  sliceMarks=m.slice(0,16);
+  document.getElementById('sampMode').textContent='COUPES D\u00c9TECT\u00c9ES';
+  document.getElementById('sampMode').classList.add('on');
+  drawWave(); buildSlices();
+  toast(sliceMarks.length+' attaque'+(sliceMarks.length>1?'s':'')+' d\u00e9tect\u00e9e'
+    +(sliceMarks.length>1?'s':'')+' \u2014 les tranches suivent le rythme du son');
+});
+document.getElementById('sampMode').addEventListener('click',function(){
+  if(sliceMarks){ sliceMarks=null; this.textContent='TRANCHES \u00c9GALES'; this.classList.remove('on');
+    toast('Retour au d\u00e9coupage en 16 parts \u00e9gales'); }
+  else toast('Utilisez D\u00c9TECTER LES COUPES pour suivre le rythme du son');
+  drawWave(); buildSlices();
+});
+makeKnob(document.getElementById('sampSensK'),document.getElementById('sampSensV'),
+  0.5,v=>sampSens=v,v=>Math.round(v*100));
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
