@@ -345,6 +345,15 @@
     background:linear-gradient(180deg,#20202a,#181820);border:1px solid var(--line);font-size:13px;font-weight:700;}
   .mididev span{flex:1;}
   #midiTargets{display:flex;gap:8px;padding-bottom:10px;}
+  #outrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  #midiOutState{font-size:11px;color:var(--dim);font-weight:700;}
+  #midiSend{display:flex;flex-direction:column;gap:6px;}
+  .msrow{display:flex;gap:10px;align-items:center;padding:7px 12px;border-radius:9px;
+    background:linear-gradient(180deg,#20202a,#181820);border:1px solid var(--line-soft);}
+  .msrow .mstrk{width:74px;font-size:11px;font-weight:800;letter-spacing:.6px;}
+  .msrow .btn{padding:0 12px;min-height:34px;font-size:11px;}
+  .msnote{width:120px;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;}
+  .msrow.active{border-color:#5a7cff;box-shadow:0 0 12px -3px rgba(90,124,255,.6);}
   #midiMon{font-size:12px;color:var(--dim);padding:4px 0;}
   #midiMon span{color:var(--cyan);font-weight:800;}
   /* ---------- filtre DJ ---------- */
@@ -936,12 +945,25 @@
     <div id="midiList"></div>
   </div>
   <div class="panel" style="padding:16px">
-    <div class="ptitle" style="padding:0 0 8px">ROUTAGE DES NOTES</div>
+    <div class="ptitle" style="padding:0 0 8px">PILOTER VOS MACHINES <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">NEXUS devient l'horloge ma&icirc;tre : vos Korg suivent le tempo et jouent avec le beat</small></div>
+    <div id="outrow">
+      <button class="btn" id="midiClock">&#9201; HORLOGE MA&Icirc;TRE</button>
+      <div class="cell" id="midiChanCell" style="cursor:pointer"><label>CANAL</label><div id="midiChanVal" style="font-weight:800">10</div></div>
+      <button class="btn" id="midiPanic">&#9940; TOUT COUPER</button>
+      <span id="midiOutState">aucun envoi</span>
+    </div>
+    <div class="ptitle" style="padding:14px 0 8px">PISTES ENVOY&Eacute;ES <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">choisissez les pistes du s&eacute;quenceur qui d&eacute;clenchent votre machine, et la note assign&eacute;e</small></div>
+    <div id="midiSend"></div>
+  </div>
+  <div class="panel" style="padding:16px">
+    <div class="ptitle" style="padding:0 0 8px">RECEVOIR DE VOS MACHINES <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">ce que joue votre clavier ou pad arrive dans NEXUS</small></div>
     <div id="midiTargets"></div>
     <div id="midiMon">derni&egrave;re activit&eacute; : <span id="midiLast">&mdash;</span></div>
     <p class="labhint"><b>PADS</b> : les notes jouent les 16 pads (note 36 = pad 1, mapping batterie) avec la v&eacute;locit&eacute;, et s'enregistrent dans la grille si &#9679; REC est actif.
     <b>BASS</b> / <b>WAVE</b> : le clavier joue le synth&eacute; choisi (note 24 = C1), et les notes s'&eacute;crivent dans le piano roll pendant l'enregistrement.
-    CC74 pilote le cutoff des synth&eacute;s, CC1 (molette) le filtre du mix.</p>
+    CC74 pilote le cutoff des synth&eacute;s, CC1 (molette) le filtre du mix.<br><br>
+    <b>Dans l'autre sens</b> : basculez une piste sur ENVOY&Eacute;E et elle d&eacute;clenchera votre machine au lieu (ou en plus) du son interne.
+    Avec l'<b>HORLOGE MA&Icirc;TRE</b>, vos Korg d&eacute;marrent, s'arr&ecirc;tent et suivent le tempo de NEXUS automatiquement.</p>
   </div>
 </div>
 <div class="modwin" id="win-perf">
@@ -1553,6 +1575,7 @@ function scheduler(){
     if(build) buildTick(t,step);
     if(autoOn){ const ad=autoData[curPat];
       AUTO_TARGETS.forEach((tg,ti)=>{ const v=ad[ti][step]; if(v!==null) tg.apply(v); }); }
+    if(midiOutOn) midiStepOut(step);
     if(brkMode) brkTick(t,step);
     if(!brkSilencesPattern()){
       TRACKS.forEach((trk,ti)=>{ const lv=+pattern[ti][step]||0;
@@ -1655,13 +1678,15 @@ function play(){ resume(); if(playing) return; playing=true; step=0; nextTime=AC
     if(f>=0){ plPos=f; selectPattern(plPatAt(f),true); } if(winIsOpen('pl')) renderPl(); }
   else if(mode==='song'&&chain.length){ chainPos=0; selectPattern(chain[0],true); renderChain(); }
   startAudioPlayback(playStart);
-  timer=setInterval(scheduler,LOOKAHEAD); playBtn.classList.add('on'); }
+  timer=setInterval(scheduler,LOOKAHEAD); playBtn.classList.add('on');
+  if(typeof clockStart==='function') clockStart(); }
 function stop(){ playing=false; clearInterval(timer);
   playBtn.classList.remove('on'); renderChain();
   if(typeof renderPl==='function'&&winIsOpen('pl')) renderPl();
   stopAudioPlayback();
   if(typeof endBuild==='function') endBuild();
   if(typeof brkEnd==='function') brkEnd();
+  if(typeof clockStop==='function') clockStop();
   pumpU.reset();
   if(audioRecording){ stopAudioRec(); recBtn.classList.remove('on'); }
   clearHighlight(); }
@@ -1709,7 +1734,8 @@ function recordHit(soundName){
 const bpmVal=document.getElementById('bpmVal');
 function setBpm(v){ bpm=Math.min(220,Math.max(50,v)); bpmVal.textContent=bpm.toFixed(1);
   delay.delayTime.value=60/bpm*0.75;
-  tapeU.set(tape,tapeTime()); }
+  tapeU.set(tape,tapeTime());
+  if(typeof clockOn!=='undefined' && clockOn && clockTimer) tickClock(); }
 (function(){ let y0=0,b0=0;
   bpmVal.addEventListener('pointerdown',e=>{ y0=e.clientY;b0=bpm; bpmVal.setPointerCapture(e.pointerId); });
   bpmVal.addEventListener('pointermove',e=>{ if(e.buttons) setBpm(b0+(y0-e.clientY)*0.25); });
@@ -2447,6 +2473,7 @@ function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bass
   wt:{...wt}, synthEngine, sat:{...sat}, tape:{...tape}, mod:{...mod}, pump:{...pump},
   fx:{...fx}, swing, kitIdx, clips, plLen, plActive,
   scale:{root:scaleRoot,key:scaleKey,snap:scaleSnap},
+  midiOut:{chan:midiChan, clock:clockOn, map:midiSendMap.map(m=>m?{on:m.on,note:m.note}:null)},
   tracks:TRACKS.map(t=>({name:t.name,sound:t.sound,color:t.color,uid:t.uid||0})),
   inserts:inserts.map(l=>(l||[null,null]).map(x=>x?{id:x.id,params:{...x.params}}:null))}; }
 function applyProject(d){
@@ -2504,6 +2531,11 @@ function applyProject(d){
     while(inserts.length<TRACKS.length) inserts.push([null,null]);
     TRACKS.forEach((_,ti)=>rebuildInserts(ti));
     if(typeof buildInserts==='function'&&winIsOpen('lab')) buildInserts(); }
+  if(d.midiOut){ midiChan=d.midiOut.chan||9;
+    if(d.midiOut.map) midiSendMap=d.midiOut.map.map(m=>m?{on:!!m.on,note:m.note}:null);
+    midiOutOn=midiSendMap.some(x=>x&&x.on);
+    const cv=document.getElementById('midiChanVal'); if(cv) cv.textContent=midiChan+1;
+    if(typeof buildMidiSend==='function') buildMidiSend(); }
   if(d.chan) d.chan.forEach((c,ti)=>{ if(ti>=TRACKS.length) return;
     trackGains[ti].gain.value=c.g;
     if(trackPan[ti].pan) trackPan[ti].pan.value=c.pan||0;
@@ -3716,6 +3748,7 @@ function rebuildTrackUI(){
   buildGrid();
   if(typeof buildMixerUI==='function') buildMixerUI();
   if(typeof buildLabTracks==='function') buildLabTracks();
+  if(typeof buildMidiSend==='function') buildMidiSend();
   if(winIsOpen('perf')) renderPerform();
 }
 function addSampleTrack(name,buf){
@@ -4211,6 +4244,97 @@ function writeFill(kind){
 document.getElementById('fillRoll').addEventListener('click',()=>writeFill('roll'));
 document.getElementById('fillStut').addEventListener('click',()=>writeFill('stutter'));
 document.getElementById('fillTrip').addEventListener('click',()=>writeFill('trip'));
+
+/* ================== SORTIE MIDI : NEXUS pilote vos machines ================== */
+const GM_DRUM=[36,38,39,42,41,63,37,43,46,49,45,47,35,44,48,50];  /* notes par défaut, style GM */
+let midiOutOn=false, midiChan=9;              /* canal 10 (index 9) = batterie */
+let midiSendMap=[];                            /* midiSendMap[ti] = {on, note} */
+function msFor(ti){
+  if(!midiSendMap[ti]) midiSendMap[ti]={on:false, note:GM_DRUM[ti%GM_DRUM.length]};
+  return midiSendMap[ti];
+}
+function midiCan(){ try{ return !!(window.AndroidMidi && AndroidMidi.canSend()); }catch(e){ return false; } }
+function midiRaw(b0,b1,b2,len){
+  if(!window.AndroidMidi) return;
+  try{ AndroidMidi.send(b0,b1|0,b2|0,len||3); }catch(e){}
+}
+function midiNoteOut(note,vel){
+  midiRaw(0x90|midiChan, note, Math.max(1,Math.round(vel*127)), 3);
+  setTimeout(()=>midiRaw(0x80|midiChan, note, 0, 3), 60);   /* note courte, style batterie */
+}
+function midiPanic(){
+  for(let c=0;c<16;c++){ midiRaw(0xB0|c,123,0,3); midiRaw(0xB0|c,120,0,3); }
+  toast('Toutes les notes coup\u00e9es sur vos machines');
+}
+/* horloge MIDI : 24 impulsions par noire, soit 6 par pas de double-croche */
+let clockOn=false, clockTimer=null;
+function clockStart(){
+  if(!clockOn||!midiCan()) return;
+  midiRaw(0xFA,0,0,1);                                     /* START */
+  clearInterval(clockTimer);
+  tickClock();
+}
+function tickClock(){
+  clearInterval(clockTimer);
+  const per=60000/bpm/24;                                  /* durée d'une impulsion */
+  clockTimer=setInterval(()=>{ if(clockOn) midiRaw(0xF8,0,0,1); }, per);
+}
+function clockStop(){
+  clearInterval(clockTimer); clockTimer=null;
+  if(clockOn && midiCan()) midiRaw(0xFC,0,0,1);            /* STOP */
+}
+/* appelé à chaque pas du séquenceur */
+function midiStepOut(step){
+  if(!midiOutOn) return;
+  TRACKS.forEach((trk,ti)=>{
+    const m=msFor(ti);
+    if(!m.on) return;
+    const lv=+pattern[ti][step]||0;
+    if(lv && audible(ti)) midiNoteOut(m.note, VELS[lv]);
+  });
+}
+/* ---------- interface ---------- */
+function buildMidiSend(){
+  const box=document.getElementById('midiSend'); if(!box) return;
+  box.innerHTML='';
+  TRACKS.forEach((trk,ti)=>{
+    const m=msFor(ti);
+    const row=document.createElement('div'); row.className='msrow'+(m.on?' active':'');
+    const nm=document.createElement('div'); nm.className='mstrk';
+    nm.textContent=trk.name; nm.style.color=trk.color;
+    const tg=document.createElement('button');
+    tg.className='btn'+(m.on?' on':''); tg.textContent=m.on?'ENVOY\u00c9E':'LOCALE';
+    tg.addEventListener('click',()=>{ m.on=!m.on; buildMidiSend(); scheduleAutosave();
+      midiOutOn=midiSendMap.some(x=>x&&x.on);
+      document.getElementById('midiOutState').textContent =
+        midiOutOn ? (midiCan()?'envoi actif':'branchez une machine pour entendre') : 'aucun envoi'; });
+    const nl=document.createElement('div'); nl.className='msnote';
+    nl.textContent='note '+m.note+' ('+NOTE_NAMES[m.note%12]+Math.floor(m.note/12-1)+')';
+    const dn=document.createElement('button'); dn.className='btn'; dn.textContent='\u2212';
+    const up=document.createElement('button'); up.className='btn'; up.textContent='+';
+    dn.addEventListener('click',()=>{ m.note=Math.max(0,m.note-1); buildMidiSend(); });
+    up.addEventListener('click',()=>{ m.note=Math.min(127,m.note+1); buildMidiSend(); });
+    const test=document.createElement('button'); test.className='btn green'; test.textContent='TESTER';
+    test.addEventListener('click',()=>{ midiNoteOut(m.note,0.9);
+      if(!midiCan()) toast('Aucune machine connect\u00e9e \u2014 branchez-la puis CONNECTER'); });
+    row.append(nm,tg,nl,dn,up,test);
+    box.appendChild(row);
+  });
+}
+document.getElementById('midiClock').addEventListener('click',function(){
+  clockOn=!clockOn; this.classList.toggle('on',clockOn);
+  if(clockOn){ if(playing) clockStart();
+    toast(midiCan()?'Horloge ma\u00eetre active : vos machines suivent le tempo'
+                   :'Horloge arm\u00e9e \u2014 connectez une machine'); }
+  else { clockStop(); toast('Horloge ma\u00eetre arr\u00eat\u00e9e'); }
+});
+document.getElementById('midiChanCell').addEventListener('click',()=>{
+  midiChan=(midiChan+1)%16;
+  document.getElementById('midiChanVal').textContent=midiChan+1;
+  toast('Canal MIDI '+(midiChan+1)+(midiChan===9?' (batterie)':''));
+});
+document.getElementById('midiPanic').addEventListener('click',midiPanic);
+buildMidiSend();
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);

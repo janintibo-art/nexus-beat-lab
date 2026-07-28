@@ -36,12 +36,28 @@ public class MainActivity extends Activity {
     private String expName = "export.wav";
     private MidiDevice midiDev;
     private MidiOutputPort midiOut;
+    private android.media.midi.MidiInputPort midiIn;
 
     /** Pont MIDI natif — architecture reprise du MidiEngine de FabKorg. */
     class MidiBridge {
         private MidiManager mgr() {
             return (MidiManager) getSystemService(MIDI_SERVICE);
         }
+
+        /** Envoi vers la machine : notes, contrôleurs, horloge, start/stop. */
+        @JavascriptInterface
+        public void send(int b0, int b1, int b2, int len) {
+            if (midiIn == null) return;
+            try {
+                byte[] m = len == 1 ? new byte[]{(byte) b0}
+                         : len == 2 ? new byte[]{(byte) b0, (byte) b1}
+                                    : new byte[]{(byte) b0, (byte) b1, (byte) b2};
+                midiIn.send(m, 0, m.length);
+            } catch (Exception e) { }
+        }
+
+        @JavascriptInterface
+        public boolean canSend() { return midiIn != null; }
 
         @JavascriptInterface
         public String listDevices() {
@@ -55,7 +71,8 @@ public class MainActivity extends Activity {
                     if (i > 0) sb.append(",");
                     sb.append("{\"id\":").append(in.getId())
                       .append(",\"name\":\"").append(name.replace("\"", " ").replace("\\", " "))
-                      .append("\",\"outputs\":").append(in.getOutputPortCount()).append("}");
+                      .append("\",\"outputs\":").append(in.getOutputPortCount())
+                      .append(",\"inputs\":").append(in.getInputPortCount()).append("}");
                 }
                 return sb.append("]").toString();
             } catch (Exception e) { return "[]"; }
@@ -72,10 +89,12 @@ public class MainActivity extends Activity {
                             closeMidi();
                             midiDev = device;
                             midiOut = device.openOutputPort(0);
-                            if (midiOut != null) {
-                                midiOut.connect(new ParserReceiver());
+                            if (midiOut != null) midiOut.connect(new ParserReceiver());
+                            // port d'entrée de la machine : permet à NEXUS de lui envoyer notes et horloge
+                            try { midiIn = device.openInputPort(0); } catch (Exception ex) { midiIn = null; }
+                            if (midiOut != null || midiIn != null) {
                                 jsMidiStatus("connecte");
-                            } else jsMidiStatus("pas de port de sortie");
+                            } else jsMidiStatus("aucun port disponible");
                         }
                     }, new Handler(Looper.getMainLooper()));
                     return;
@@ -90,8 +109,9 @@ public class MainActivity extends Activity {
 
     private void closeMidi() {
         try { if (midiOut != null) midiOut.close(); } catch (Exception e) {}
+        try { if (midiIn != null) midiIn.close(); } catch (Exception e) {}
         try { if (midiDev != null) midiDev.close(); } catch (Exception e) {}
-        midiOut = null; midiDev = null;
+        midiOut = null; midiIn = null; midiDev = null;
     }
 
     /** Analyse des flux MIDI avec running status (comme dans FabKorg). */
