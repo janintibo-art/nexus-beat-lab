@@ -390,6 +390,8 @@
         <div class="ptitle" style="padding:0">SAMPLE <small id="sampName">aucun fichier charg&eacute;</small></div>
         <span style="flex:1"></span>
         <button class="btn" id="loadSample">&#128194; CHARGER UN AUDIO</button>
+        <button class="btn" id="sampFit">&#9202; CALER AU TEMPO</button>
+        <button class="btn" id="sampBars">4 MESURES</button>
         <input type="file" id="sampleFile" accept="audio/*" style="display:none">
       </div>
       <canvas id="wave" width="1150" height="130"></canvas>
@@ -505,6 +507,7 @@
         <div class="ptitle" style="padding:6px 0 4px">SON</div>
         <div id="labknobs">
           <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="labPitK"></div><label>PITCH</label><div class="kv" id="labPitV">0</div></div>
+          <button class="btn" id="labKeep" title="Garder la dur&eacute;e malgr&eacute; le pitch">DUR&Eacute;E FIXE</button>
           <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="labCutK"></div><label>CUTOFF</label><div class="kv" id="labCutV">100</div></div>
           <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="labDecK"></div><label>DECAY</label><div class="kv" id="labDecV">100</div></div>
         </div>
@@ -674,6 +677,7 @@
       <button class="btn" id="edFout">FADE OUT</button>
       <button class="btn" id="edGup">+3dB</button>
       <button class="btn" id="edGdn">&minus;3dB</button>
+      <button class="btn" id="edFit">&#9202; CALER AU TEMPO</button>
       <span class="edsep"></span>
       <button class="btn" id="edUndo">&#8630; ANNULER</button>
     </div>
@@ -1071,7 +1075,7 @@ async function loadKit(i){
   kitIdx=(i+KITS.length)%KITS.length;
   const k=KITS[kitIdx];
   document.getElementById('kitName').textContent=k.name;
-  kitBuf={};
+  kitBuf={}; clearStretchCache();
   if(!k.dir){ toast('Kit SYNTH LIVE : sons g\u00e9n\u00e9r\u00e9s en direct'); return; }
   let ok=0;
   await Promise.all(SOUND_NAMES.map(async n=>{
@@ -1090,21 +1094,24 @@ function playSound(name,t,out,rate){
 }
 
 /* ---------- SOUND LAB : paramètres de son par piste ---------- */
-const sndParams = TRACKS.map(()=>({semi:0, cutoff:1, decay:1, gain:1}));
+const sndParams = TRACKS.map(()=>({semi:0, cutoff:1, decay:1, gain:1, keep:false}));
 function playTrack(ti,t,out,vel){
   out = out || trackGains[ti];
   vel = (vel===undefined) ? 1 : vel;
   const C=out.context, name=TRACKS[ti].sound, p=sndParams[ti];
   const b=kitBuf[name];
   if(!b){ if(SOUNDS[name]) SOUNDS[name](t,out); return; }
-  const s=C.createBufferSource(); s.buffer=b;
-  const rate=Math.pow(2,p.semi/12); if(rate!==1) s.playbackRate.value=rate;
+  const s=C.createBufferSource();
+  const rate=Math.pow(2,p.semi/12);
+  /* mode KEEP : compense l'étirement dû au pitch pour garder la durée d'origine */
+  s.buffer = p.keep ? stretched(C,b,name+'|'+kitIdx,rate) : b;
+  if(rate!==1) s.playbackRate.value=rate;
   let node=s;
   if(p.cutoff<0.99){ const f=C.createBiquadFilter(); f.type='lowpass';
     f.frequency.value=180*Math.pow(45,p.cutoff); node.connect(f); node=f; }
   const g=C.createGain(); const amp=p.gain*vel;
   g.gain.setValueAtTime(amp,t);
-  const dur=b.duration/rate;
+  const dur=s.buffer.duration/rate;
   if(p.decay<0.99){ const dd=Math.max(0.03,dur*p.decay);
     g.gain.setValueAtTime(amp,t+dd*0.55);
     g.gain.exponentialRampToValueAtTime(0.001,t+dd);
@@ -1706,6 +1713,7 @@ function labSync(){
   kLabPan.set(((trackPan[ti].pan?trackPan[ti].pan.value:0)+1)/2);
   kLabLo.set((e.lo.gain.value+15)/30); kLabMd.set((e.md.gain.value+15)/30);
   kLabHi.set((e.hi.gain.value+15)/30);
+  document.getElementById('labKeep').classList.toggle('on',!!p.keep);
   document.getElementById('labMute').classList.toggle('on',trackMute[ti]);
   document.getElementById('labSolo').classList.toggle('on',trackSolo[ti]);
   drawLabEq();
@@ -1739,6 +1747,11 @@ const kLabMd=makeKnob(document.getElementById('labMdK'),document.getElementById(
   0.5,v=>{ trackEQ[selTrack].md.gain.value=v*30-15; drawLabEq(); },v=>(v*30-15).toFixed(0)+'dB');
 const kLabHi=makeKnob(document.getElementById('labHiK'),document.getElementById('labHiV'),
   0.5,v=>{ trackEQ[selTrack].hi.gain.value=v*30-15; drawLabEq(); },v=>(v*30-15).toFixed(0)+'dB');
+document.getElementById('labKeep').addEventListener('click',function(){
+  pushUndo(true); const p=sndParams[selTrack]; p.keep=!p.keep;
+  this.classList.toggle('on',p.keep);
+  toast(p.keep?'Dur\u00e9e fixe : le pitch ne change plus la longueur du son'
+              :'Mode normal : le pitch change la vitesse'); });
 document.getElementById('labMute').addEventListener('click',()=>{
   pushUndo(true); trackMute[selTrack]=!trackMute[selTrack]; buildGrid(); labSync();
   if(winIsOpen('perf')) renderPerform();
@@ -2535,6 +2548,16 @@ function edGain(db){ return b=>{ const nb=edClone(b), g=Math.pow(10,db/20);
   return nb; }; }
 document.getElementById('edGup').addEventListener('click',()=>edOp(edGain(3)));
 document.getElementById('edGdn').addEventListener('click',()=>edOp(edGain(-3)));
+document.getElementById('edFit').addEventListener('click',()=>edOp(b=>{
+  /* devine le nombre de mesures le plus proche puis étire dessus */
+  const bar=4*60/bpm;
+  let best=1,err=1e9;
+  [0.5,1,2,4,8,16].forEach(n=>{ const e=Math.abs(b.duration-n*bar);
+    if(e<err){err=e;best=n;} });
+  const target=best*bar, f=target/b.duration;
+  if(Math.abs(f-1)<0.002){ toast('D\u00e9j\u00e0 cal\u00e9 sur '+best+' mesure(s)'); edUndoStack.pop(); return null; }
+  toast('Cal\u00e9 sur '+best+' mesure(s) \u00e0 '+bpm.toFixed(0)+' BPM (\u00d7'+f.toFixed(3)+')');
+  return stretchBuffer(AC,b,f); }));
 document.getElementById('edUndo').addEventListener('click',()=>{
   if(!edUndoStack.length){ toast('Rien \u00e0 annuler'); return; }
   const b=edUndoStack.pop();
@@ -3129,6 +3152,61 @@ document.getElementById('prClearNotes').addEventListener('click',()=>{
   pushUndo(true);
   for(let s=0;s<MAXSTEPS;s++) bassLines[curPat][s]=null;
   renderPiano(); toast('Notes effac\u00e9es'); });
+
+/* ================== TIME-STRETCH (algorithme OLA porté de Studio Tibo) ==================
+   Granulaire : fenêtre de Hann, grains ~46 ms, recouvrement 50 %.
+   Le buffer produit est indépendant du contexte : identique en direct et à l'export. */
+function stretchBuffer(c,buf,factor){
+  if(!buf || Math.abs(factor-1)<0.002) return buf;
+  const sr=buf.sampleRate, chs=buf.numberOfChannels;
+  const grain=Math.round(sr*0.046)&~1, hopIn=grain>>1;
+  const hopOut=Math.max(1,Math.round(hopIn*factor));
+  const outLen=Math.max(grain,Math.round(buf.length*factor));
+  const out=c.createBuffer(chs,outLen,sr);
+  const win=new Float32Array(grain);
+  for(let i=0;i<grain;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/grain);
+  const norm=hopOut/hopIn;               /* compense le recouvrement variable */
+  for(let ch=0;ch<chs;ch++){
+    const src=buf.getChannelData(ch), dst=out.getChannelData(ch);
+    for(let oi=0,ii=0; oi+grain<=outLen; oi+=hopOut, ii+=hopIn){
+      const base=Math.max(0,Math.min(ii,src.length-grain));
+      for(let k=0;k<grain;k++) dst[oi+k]+=src[base+k]*win[k]*norm;
+    }
+  }
+  return out;
+}
+/* cache : évite de recalculer le même étirement à chaque note */
+const _stretchCache=new Map();
+function stretched(c,buf,key,factor){
+  if(!buf || Math.abs(factor-1)<0.002) return buf;
+  const k=key+':'+factor.toFixed(3);
+  if(!_stretchCache.has(k)) _stretchCache.set(k,stretchBuffer(c,buf,factor));
+  return _stretchCache.get(k);
+}
+function clearStretchCache(prefix){
+  [..._stretchCache.keys()].forEach(k=>{ if(!prefix||k.startsWith(prefix)) _stretchCache.delete(k); });
+}
+
+/* ---------- calage au tempo (time-stretch, sans changer la hauteur) ---------- */
+let sampBars=4;
+document.getElementById('sampBars').addEventListener('click',function(){
+  const o=[1,2,4,8]; sampBars=o[(o.indexOf(sampBars)+1)%o.length];
+  this.textContent=sampBars+' MESURE'+(sampBars>1?'S':''); });
+function fitToTempo(buf,bars){
+  const target=bars*4*60/bpm;                       // durée voulue en secondes
+  const factor=target/buf.duration;
+  if(Math.abs(factor-1)<0.002) return {buf,factor};
+  return {buf:stretchBuffer(AC,buf,factor),factor};
+}
+document.getElementById('sampFit').addEventListener('click',()=>{
+  if(!sampleBuf){ toast('Chargez d\u2019abord un audio'); return; }
+  const r=fitToTempo(sampleBuf,sampBars);
+  sampleBuf=r.buf; drawWave(); buildSlices();
+  document.getElementById('sampName').textContent=
+    'cal\u00e9 sur '+sampBars+' mesure'+(sampBars>1?'s':'')+' \u00e0 '+bpm.toFixed(0)+' BPM \u2014 '
+    +sampleBuf.duration.toFixed(2)+' s';
+  toast('Sample cal\u00e9 au tempo (\u00d7'+r.factor.toFixed(3)+', hauteur inchang\u00e9e)');
+});
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
