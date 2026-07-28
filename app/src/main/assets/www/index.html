@@ -101,6 +101,10 @@
   .step.on{background:linear-gradient(180deg,var(--sc),color-mix(in srgb,var(--sc) 55%,#000));
     border-color:color-mix(in srgb,var(--sc) 70%,#fff);
     box-shadow:0 0 10px color-mix(in srgb,var(--sc) 60%,transparent), inset 0 1px 0 rgba(255,255,255,.4);}
+  .step.v1{opacity:.45;box-shadow:none;}
+  .step.v2{opacity:.8;}
+  .step.v3{box-shadow:0 0 16px color-mix(in srgb,var(--sc) 85%,transparent), inset 0 1px 0 rgba(255,255,255,.7);
+    border-color:#fff;}
   .colhead{font-size:10px;text-align:center;color:var(--dim);font-weight:700;padding-bottom:2px;}
   .colhead.beat{color:var(--txt);}
   .playcol{outline:2px solid var(--orange);outline-offset:1px;border-radius:7px;}
@@ -164,8 +168,11 @@
   #proll{display:flex;gap:4px;}
   #prtools{display:flex;align-items:center;gap:10px;padding:0 0 10px;flex-wrap:wrap;}
   .prtlbl{font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--dim);}
-  #prchords,#prmodes{display:flex;gap:6px;}
-  #prchords .btn,#prmodes .btn{padding:8px 11px;font-size:10px;}
+  #prchords,#prmodes,#prdurs,#prvels{display:flex;gap:6px;}
+  #prtools .btn{padding:8px 11px;font-size:10px;}
+  .prcell.tail{opacity:.55;}
+  .prcell.on.pv1{opacity:.5;}
+  .prcell.on.pv3{box-shadow:0 0 14px rgba(46,230,255,.8);border-color:#fff;}
   #prkeys{display:grid;grid-auto-rows:22px;width:56px;gap:1px;}
   .prkey{font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;
     background:#dfdfe6;color:#222;border-radius:3px 0 0 3px;}
@@ -364,7 +371,7 @@
     <!-- ====== SEQUENCEUR ====== -->
     <div class="panel">
       <div id="seqhead">
-        <div class="ptitle" style="padding:0">SEQ</div>
+        <div class="ptitle" style="padding:0">SEQ <small style="font-weight:400;color:var(--dim)">tapez plusieurs fois : doux &rarr; normal &rarr; accent</small></div>
         <div id="patbtns"></div>
         <div class="cell" id="stepsCell" style="cursor:pointer"><label>STEPS</label><div id="stepsVal" style="font-weight:800">16</div></div>
         <button class="btn" id="copyBtn">COPIER</button>
@@ -409,7 +416,7 @@
 <!-- ====== FENETRES MODULES ====== -->
 <div class="modwin" id="win-piano">
   <div class="panel mwhead">
-    <span>&#127929; PIANO ROLL <small>pattern P<span id="prPat">1</span> &middot; 3 octaves &middot; accords et arp&egrave;ges : choisissez un outil puis touchez la grille</small></span>
+    <span>&#127929; PIANO ROLL <small>P<span id="prPat">1</span> &middot; 3 octaves &middot; choisissez accord, dur&eacute;e et v&eacute;locit&eacute;, puis touchez la grille</small></span>
     <span style="flex:1"></span>
     <button class="btn" id="prWave">SAW</button>
     <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="prCutK"></div><label>CUTOFF</label><div class="kv" id="prCutV">60</div></div>
@@ -422,6 +429,8 @@
     <div id="prtools">
       <span class="prtlbl">ACCORD</span><div id="prchords"></div>
       <span class="prtlbl">MODE</span><div id="prmodes"></div>
+      <span class="prtlbl">DUR&Eacute;E</span><div id="prdurs"></div>
+      <span class="prtlbl">V&Eacute;LOCIT&Eacute;</span><div id="prvels"></div>
     </div>
     <div id="proll"><div id="prkeys"></div><div id="prgrid"></div></div>
   </div>
@@ -905,14 +914,15 @@ const TRACKS = [
   {name:'BASS',  sound:'bass',  color:'var(--cyan)'},
   {name:'PERC',  sound:'perc1', color:'var(--cyan)'},
 ];
+const VELS=[0,0.45,0.8,1.0];   /* 0 vide, 1 doux, 2 normal, 3 accent (comme Studio Tibo) */
 const trackGains = TRACKS.map(()=>{ const g=AC.createGain(); g.gain.value=0.85; g.connect(master); return g; });
 const trackMute  = TRACKS.map(()=>false);
 
 /* ---------- 8 patterns + chaîne du mode SONG ---------- */
 const NPAT=8, MAXSTEPS=32;
-function emptyPat(){ return TRACKS.map(()=>Array(MAXSTEPS).fill(false)); }
-function pad32(rows){ return rows.map(r=>{ const a=r.slice(0,MAXSTEPS);
-  while(a.length<MAXSTEPS) a.push(false); return a; }); }
+function emptyPat(){ return TRACKS.map(()=>Array(MAXSTEPS).fill(0)); }
+function pad32(rows){ return rows.map(r=>{ const a=r.slice(0,MAXSTEPS).map(v=>v===true?2:(+v||0));
+  while(a.length<MAXSTEPS) a.push(0); return a; }); }
 let patterns = Array.from({length:NPAT}, emptyPat);
 let patLens = Array(NPAT).fill(16);       // 8, 16 ou 32 pas par pattern
 let bassLines = Array.from({length:NPAT},()=>Array(MAXSTEPS).fill(null)); // notes du piano roll
@@ -924,21 +934,21 @@ let mode = 'pattern';             // 'pattern' ou 'song'
 let clip = null;                  // presse-papier COPIER/COLLER
 
 const DEMO = [
-  [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0],   // kick
-  [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],   // snare
-  [0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,1],   // clap
-  [1,0,1,0, 1,0,1,1, 1,0,1,0, 1,0,1,1],   // hat
-  [1,0,0,1, 0,0,1,0, 0,1,0,0, 1,0,0,0],   // bass
-  [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],   // perc
-].map(r=>r.map(Boolean));
+  [3,0,0,0, 0,0,2,0, 3,0,0,0, 0,0,0,0],   // kick
+  [0,0,0,0, 3,0,0,0, 0,0,0,0, 3,0,0,0],   // snare
+  [0,0,0,0, 0,0,0,0, 0,0,0,0, 2,0,0,1],   // clap
+  [2,0,1,0, 2,0,1,1, 2,0,1,0, 2,0,1,1],   // hat
+  [3,0,0,1, 0,0,2,0, 0,1,0,0, 2,0,0,0],   // bass
+  [0,0,2,0, 0,0,0,0, 0,0,2,0, 0,0,0,0],   // perc
+];
 const DEMO2 = [
-  [1,0,0,0, 0,0,1,0, 1,0,0,1, 0,0,1,0],   // kick relance
-  [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,1,1],   // snare fill
-  [0,0,0,0, 0,0,0,0, 1,0,0,0, 1,0,0,1],   // clap
-  [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],   // hat serré
-  [1,0,0,1, 0,0,1,0, 0,1,0,0, 1,0,1,0],   // bass
-  [0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,1],   // perc
-].map(r=>r.map(Boolean));
+  [3,0,0,0, 0,0,2,0, 3,0,0,1, 0,0,2,0],   // kick relance
+  [0,0,0,0, 3,0,0,0, 0,0,0,0, 3,0,2,2],   // snare fill
+  [0,0,0,0, 0,0,0,0, 2,0,0,0, 2,0,0,1],   // clap
+  [2,1,2,1, 2,1,2,1, 2,1,2,1, 3,1,2,1],   // hat serré
+  [3,0,0,1, 0,0,2,0, 0,1,0,0, 2,0,1,0],   // bass
+  [0,0,2,0, 0,1,0,0, 0,0,2,0, 0,1,0,1],   // perc
+];
 
 /* ---------- pads ---------- */
 const PADS = [
@@ -988,8 +998,9 @@ function playSound(name,t,out,rate){
 
 /* ---------- SOUND LAB : paramètres de son par piste ---------- */
 const sndParams = TRACKS.map(()=>({semi:0, cutoff:1, decay:1, gain:1}));
-function playTrack(ti,t,out){
+function playTrack(ti,t,out,vel){
   out = out || trackGains[ti];
+  vel = (vel===undefined) ? 1 : vel;
   const C=out.context, name=TRACKS[ti].sound, p=sndParams[ti];
   const b=kitBuf[name];
   if(!b){ if(SOUNDS[name]) SOUNDS[name](t,out); return; }
@@ -998,10 +1009,11 @@ function playTrack(ti,t,out){
   let node=s;
   if(p.cutoff<0.99){ const f=C.createBiquadFilter(); f.type='lowpass';
     f.frequency.value=180*Math.pow(45,p.cutoff); node.connect(f); node=f; }
-  const g=C.createGain(); g.gain.setValueAtTime(p.gain,t);
+  const g=C.createGain(); const amp=p.gain*vel;
+  g.gain.setValueAtTime(amp,t);
   const dur=b.duration/rate;
   if(p.decay<0.99){ const dd=Math.max(0.03,dur*p.decay);
-    g.gain.setValueAtTime(p.gain,t+dd*0.55);
+    g.gain.setValueAtTime(amp,t+dd*0.55);
     g.gain.exponentialRampToValueAtTime(0.001,t+dd);
     s.stop(t+dd+0.02); }
   node.connect(g); g.connect(out); s.start(t);
@@ -1010,8 +1022,9 @@ function playTrack(ti,t,out){
 /* ---------- synthé bass du piano roll ---------- */
 const bassGain=AC.createGain(); bassGain.gain.value=0.8; bassGain.connect(master);
 const bassPrm={wave:'sawtooth', cutoff:0.6, res:0.25, decay:0.45};
-function playBassNote(semi,t,out){
+function playBassNote(semi,t,out,dur,vel){
   out = out || bassGain;
+  vel = (vel===undefined)?0.9:vel;
   const C=out.context;
   const f0=32.70*Math.pow(2,semi/12);           // C1 = 32,70 Hz
   const o=C.createOscillator(); o.type=bassPrm.wave; o.frequency.value=f0;
@@ -1021,8 +1034,10 @@ function playBassNote(semi,t,out){
   flt.frequency.setValueAtTime(fc,t);
   flt.frequency.exponentialRampToValueAtTime(Math.max(110,fc*0.22),t+0.22);
   flt.Q.value=bassPrm.res*18;
-  const g=C.createGain(); const d=0.08+bassPrm.decay*0.85;
-  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.9,t+0.004);
+  const g=C.createGain();
+  let d=0.08+bassPrm.decay*0.85;
+  if(dur) d=Math.max(0.06,Math.min(d,dur));       /* la note ne dépasse pas sa durée */
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vel,t+0.004);
   g.gain.exponentialRampToValueAtTime(0.001,t+d);
   o.connect(flt); o2.connect(flt); flt.connect(g); g.connect(out);
   o.start(t); o2.start(t); o.stop(t+d+0.05); o2.stop(t+d+0.05);
@@ -1139,9 +1154,13 @@ function buildGrid(){
       c.className='step'+(Math.floor(s/4)%2===0?' q':'');
       c.style.setProperty('--sc',trk.color);
       c.dataset.col=s;
-      if(pattern[ti][s]) c.classList.add('on');
+      const lvl=+pattern[ti][s]||0;
+      if(lvl) c.classList.add('on','v'+lvl);
       c.addEventListener('pointerdown',e=>{ e.preventDefault();
-        pattern[ti][s]=!pattern[ti][s]; c.classList.toggle('on',pattern[ti][s]); });
+        const v=(+pattern[ti][s]||0), nv=(v+1)%4;      // 0 vide → 1 doux → 2 normal → 3 accent
+        pattern[ti][s]=nv;
+        c.classList.remove('on','v1','v2','v3');
+        if(nv) c.classList.add('on','v'+nv); });
       seqgrid.appendChild(c); stepEls[ti][s]=c;
     }
   });
@@ -1200,10 +1219,10 @@ function scheduler(){
     if(pump.on && step%PUMP_RATES[pump.rate].steps===0) pumpU.duck(t,pump);
     if(autoOn){ const ad=autoData[curPat];
       AUTO_TARGETS.forEach((tg,ti)=>{ const v=ad[ti][step]; if(v!==null) tg.apply(v); }); }
-    TRACKS.forEach((trk,ti)=>{ if(pattern[ti][step] && !trackMute[ti]) playTrack(ti,t); });
+    TRACKS.forEach((trk,ti)=>{ const lv=+pattern[ti][step]||0;
+      if(lv && !trackMute[ti]) playTrack(ti,t,null,VELS[lv]); });
     const bn=bassLines[curPat][step];
-    if(bn!==null && bn!==undefined)
-      (Array.isArray(bn)?bn:[bn]).forEach(n=>playSynth(n,t));
+    if(bn!==null && bn!==undefined) noteArr(bn).forEach(n=>playNoteObj(n,t));
     highlight(step);
     step=(step+1)%len; nextTime+=stepDur();
     if(step===0 && mode==='pattern' && pendingPat>=0){
@@ -1273,7 +1292,7 @@ function recordHit(soundName){
   const ti=REC_MAP[soundName]; if(ti===undefined) return;
   const len=patLens[curPat];
   const idx=((Math.round((AC.currentTime-playStart)/stepDur()))%len+len)%len;
-  if(!pattern[ti][idx]){ pattern[ti][idx]=true;
+  if(!pattern[ti][idx]){ pattern[ti][idx]=2;
     const el=stepEls[ti]&&stepEls[ti][idx]; if(el) el.classList.add('on'); }
 }
 
@@ -1384,17 +1403,35 @@ PRMODES.forEach((m,i)=>{ const b=document.createElement('button');
   b.addEventListener('click',()=>{ prMode=m.id;
     [...prmodesEl.children].forEach((x,j)=>x.classList.toggle('on',j===i)); });
   prmodesEl.appendChild(b); });
-function noteArr(v){ return v===null||v===undefined ? [] : (Array.isArray(v)?v:[v]); }
+const PR_DURS=[1,2,4,8], PR_VELS=[0.5,0.85,1.0];
+let prDur=1, prVel=1;
+const prdursEl=document.getElementById('prdurs'), prvelsEl=document.getElementById('prvels');
+['1','2','4','8'].forEach((n,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===0?' on':''); b.textContent=n+' pas';
+  b.addEventListener('click',()=>{ prDur=PR_DURS[i];
+    [...prdursEl.children].forEach((x,j)=>x.classList.toggle('on',j===i)); });
+  prdursEl.appendChild(b); });
+['DOUX','NORMAL','ACCENT'].forEach((n,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===1?' on':''); b.textContent=n;
+  b.addEventListener('click',()=>{ prVel=i;
+    [...prvelsEl.children].forEach((x,j)=>x.classList.toggle('on',j===i)); });
+  prvelsEl.appendChild(b); });
+/* une note = {p:hauteur, d:durée en pas, v:index de vélocité} ; anciens formats acceptés */
+function normNote(n){ return (typeof n==='number') ? {p:n,d:1,v:1} : n; }
+function noteArr(v){ if(v===null||v===undefined) return [];
+  return (Array.isArray(v)?v:[v]).map(normNote); }
+function pitches(v){ return noteArr(v).map(n=>n.p); }
 function placeNotes(line,c,semi,len){
-  const notes=CHORDS[prChord].iv.map(iv=>semi+iv).filter(n=>n<PR_ROWS);
+  const ivs=CHORDS[prChord].iv.filter(iv=>semi+iv<PR_ROWS);
   if(prMode==='bloc'){
-    line[c]=notes.slice();
-    notes.forEach(n=>playSynth(n,AC.currentTime));
+    line[c]=ivs.map(iv=>({p:semi+iv,d:prDur,v:prVel}));
+    ivs.forEach(iv=>playSynth(semi+iv,AC.currentTime));
   }else{
-    let seq=notes.slice();
+    let seq=ivs.map(iv=>semi+iv);
     if(prMode==='down') seq.reverse();
-    if(prMode==='updown') seq=notes.concat(notes.slice(1,-1).reverse());
-    for(let k=0;k<seq.length && c+k<len;k++) line[c+k]=[seq[k]];
+    if(prMode==='updown') seq=seq.concat(seq.slice(1,-1).reverse());
+    for(let k=0;k<seq.length && c+k*prDur<len;k++)
+      line[c+k*prDur]=[{p:seq[k],d:prDur,v:prVel}];
     playSynth(seq[0],AC.currentTime);
   }
 }
@@ -1417,11 +1454,18 @@ function renderPiano(){
       const cell=document.createElement('div');
       cell.className='prcell'+(Math.floor(c/4)%2===0?' q':'')+(isBlk?' blkrow':'');
       cell.dataset.pc=c;
-      if(noteArr(line[c]).includes(semi)) cell.classList.add('on');
+      const here=noteArr(line[c]).find(n=>n.p===semi);
+      if(here) cell.classList.add('on','pv'+(here.v+1));
+      else {  // queue d'une note tenue commencée plus tôt
+        for(let k=1;k<8 && c-k>=0;k++){
+          const prev=noteArr(line[c-k]).find(n=>n.p===semi && n.d>k);
+          if(prev){ cell.classList.add('on','tail'); break; }
+        }
+      }
       cell.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
         const cur=noteArr(line[c]);
-        if(cur.includes(semi)){
-          const left=cur.filter(n=>n!==semi);
+        if(cur.some(n=>n.p===semi)){
+          const left=cur.filter(n=>n.p!==semi);
           line[c]=left.length?left:null;
         } else placeNotes(line,c,semi,len);
         renderPiano(); });
@@ -1589,9 +1633,10 @@ function scheduleOffline(nodes, seq, loops){
         const vv=ad[1][s]; if(vv!==null) nodes.outGain.gain.setValueAtTime(vv*outGain.gain.value,t);
         const vd=ad[3][s]; if(vd!==null&&fx.dly) nodes.delayWet.gain.setValueAtTime(vd*0.9,t);
         const vb=ad[4][s]; if(vb!==null) bassPrm.cutoff=vb; }
-      TRACKS.forEach((trk,ti)=>{ if(pat[ti][s]&&!trackMute[ti]) playTrack(ti,tt,nodes.trackOuts[ti]); });
+      TRACKS.forEach((trk,ti)=>{ const lv=+pat[ti][s]||0;
+        if(lv&&!trackMute[ti]) playTrack(ti,tt,nodes.trackOuts[ti],VELS[lv]); });
       const bn=line[s]; if(bn!==null&&bn!==undefined)
-        (Array.isArray(bn)?bn:[bn]).forEach(n=>playSynth(n,tt,nodes.bassOut));
+        noteArr(bn).forEach(n=>playNoteObj(n,tt,nodes.bassOut));
       t+=sd;
     }
   }
@@ -1668,14 +1713,16 @@ function buildMidi(seq,loops){
   for(let L=0;L<loops;L++) for(const p of seq){
     const len=patLens[p], pat=patterns[p], line=bassLines[p];
     for(let s=0;s<len;s++){
-      TRACKS.forEach((trk,ti)=>{ if(pat[ti][s]&&!trackMute[ti]){
-        drums.push({tick,bytes:[0x99,DRUM_NOTES[ti],100]});
+      TRACKS.forEach((trk,ti)=>{ const lv=+pat[ti][s]||0;
+        if(lv&&!trackMute[ti]){
+        drums.push({tick,bytes:[0x99,DRUM_NOTES[ti],Math.round(VELS[lv]*127)]});
         drums.push({tick:tick+(tps>>1),bytes:[0x89,DRUM_NOTES[ti],0]}); }});
       const bn=line[s];
       if(bn!==null&&bn!==undefined)
-        (Array.isArray(bn)?bn:[bn]).forEach(n=>{
-          synth.push({tick,bytes:[0x90,n+24,100]});
-          synth.push({tick:tick+tps,bytes:[0x80,n+24,0]}); });
+        noteArr(bn).forEach(n=>{
+          const vv=Math.round(PR_VELS[n.v===undefined?1:n.v]*127);
+          synth.push({tick,bytes:[0x90,n.p+24,vv]});
+          synth.push({tick:tick+(n.d||1)*tps,bytes:[0x80,n.p+24,0]}); });
       tick+=tps;
     }
   }
@@ -2007,26 +2054,28 @@ const wt={pos:0, uni:3, det:0.15, sub:0.3, oct:1, vol:0.8,
           lfoRate:0.3, lfoAmt:0};
 let synthEngine='bass';                     // moteur du piano roll : 'bass' ou 'wave'
 const waveGain=AC.createGain(); waveGain.gain.value=0.8; waveGain.connect(master);
-function playWaveNote(semi,t,out){
+function playWaveNote(semi,t,out,dur,vel){
   out = out || waveGain;
+  vel = (vel===undefined)?0.9:vel;
   const C=out.context, waves=wtWavesFor(C);
   const f0=32.70*Math.pow(2,(semi+wt.oct*12)/12);
   const fpos=wt.pos*(WT_N-1), i0=Math.floor(fpos), frac=fpos-i0;
   const i1=Math.min(WT_N-1,i0+1);
-  const dur=0.05+wt.dec*1.2, att=0.002+wt.att*0.25;
+  let ndur=0.05+wt.dec*1.2; if(dur) ndur=Math.max(0.08,Math.min(ndur,dur));
+  const att=0.002+wt.att*0.25;
   /* filtre + enveloppe + LFO */
   const flt=C.createBiquadFilter(); flt.type='lowpass';
   const base=120*Math.pow(120,wt.cutoff);
   const pk=Math.min(16000, base*(1+wt.envAmt*8));
   flt.frequency.setValueAtTime(pk,t);
-  flt.frequency.exponentialRampToValueAtTime(Math.max(90,base*0.5),t+dur*0.8);
+  flt.frequency.exponentialRampToValueAtTime(Math.max(90,base*0.5),t+ndur*0.8);
   flt.Q.value=wt.res*16;
   if(wt.lfoAmt>0){ const lfo=C.createOscillator(); lfo.frequency.value=0.3+wt.lfoRate*11;
     const lg=C.createGain(); lg.gain.value=wt.lfoAmt*base*2;
-    lfo.connect(lg); lg.connect(flt.frequency); lfo.start(t); lfo.stop(t+dur+0.1); }
+    lfo.connect(lg); lg.connect(flt.frequency); lfo.start(t); lfo.stop(t+ndur+0.1); }
   const amp=C.createGain();
-  amp.gain.setValueAtTime(0,t); amp.gain.linearRampToValueAtTime(0.9,t+att);
-  amp.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  amp.gain.setValueAtTime(0,t); amp.gain.linearRampToValueAtTime(vel,t+att);
+  amp.gain.exponentialRampToValueAtTime(0.001,t+ndur);
   flt.connect(amp); amp.connect(out);
   /* voix unison : chaque voix = 2 oscillateurs (morphing entre 2 tables) */
   const nv=wt.uni, cents=wt.det*35;
@@ -2036,20 +2085,25 @@ function playWaveNote(semi,t,out){
     const o0=C.createOscillator(); o0.setPeriodicWave(waves[i0]);
     o0.frequency.value=f0; o0.detune.value=d;
     const g0=C.createGain(); g0.gain.value=1-frac; o0.connect(g0); g0.connect(vg);
-    o0.start(t); o0.stop(t+dur+0.05);
+    o0.start(t); o0.stop(t+ndur+0.05);
     if(frac>0.01){ const o1=C.createOscillator(); o1.setPeriodicWave(waves[i1]);
       o1.frequency.value=f0; o1.detune.value=d;
       const g1=C.createGain(); g1.gain.value=frac; o1.connect(g1); g1.connect(vg);
-      o1.start(t); o1.stop(t+dur+0.05); }
+      o1.start(t); o1.stop(t+ndur+0.05); }
   }
   if(wt.sub>0.02){ const so=C.createOscillator(); so.type='sine'; so.frequency.value=f0/2;
     const sg=C.createGain(); sg.gain.value=wt.sub*0.8; so.connect(sg); sg.connect(flt);
-    so.start(t); so.stop(t+dur+0.05); }
+    so.start(t); so.stop(t+ndur+0.05); }
 }
 /* routeur : le piano roll joue le moteur choisi */
-function playSynth(semi,t,out){
-  if(synthEngine==='wave') playWaveNote(semi,t,out===bassGain?undefined:out);
-  else playBassNote(semi,t,out);
+function playSynth(semi,t,out,dur,vel){
+  if(synthEngine==='wave') playWaveNote(semi,t,out===bassGain?undefined:out,dur,vel);
+  else playBassNote(semi,t,out,dur,vel);
+}
+/* joue un objet note {p,d,v} en tenant compte du tempo */
+function playNoteObj(n,t,out){
+  const o=normNote(n);
+  playSynth(o.p,t,out,(o.d||1)*stepDur()*0.95,PR_VELS[o.v===undefined?1:o.v]);
 }
 /* ---------- affichage de la forme d'onde ---------- */
 function drawWT(){
@@ -2491,7 +2545,7 @@ function midiNoteOn(note,vel){ resume();
       const len=patLens[curPat];
       const idx=((Math.round((AC.currentTime-playStart)/stepDur()))%len+len)%len;
       const cur=noteArr(bassLines[curPat][idx]);
-      if(!cur.includes(semi)){ cur.push(semi); bassLines[curPat][idx]=cur;
+      if(!cur.some(n=>n.p===semi)){ cur.push({p:semi,d:prDur,v:1}); bassLines[curPat][idx]=cur;
         if(winIsOpen('piano')) renderPiano(); }
     }
   }
@@ -2550,8 +2604,7 @@ function renderPerform(){
 
 /* ================== PRESETS DE STYLE + ACCUEIL ================== */
 function mkPatterns(p1,p2){ const a=Array.from({length:NPAT},emptyPat);
-  a[0]=pad32(p1.map(r=>r.map(Boolean)));
-  if(p2) a[1]=pad32(p2.map(r=>r.map(Boolean)));
+  a[0]=pad32(p1); if(p2) a[1]=pad32(p2);
   return a; }
 function mkBass(notes){ const b=Array.from({length:NPAT},()=>Array(MAXSTEPS).fill(null));
   Object.keys(notes).forEach(s=>{ const n=notes[s]; b[0][+s]=Array.isArray(n)?n:[n]; });
@@ -2561,13 +2614,13 @@ const PRESETS=[
  {name:'HOUSE', desc:'124 BPM \u00b7 kit 909 \u00b7 pompage sidechain, basse offbeat',
   data:{bpm:124, swing:0.12, kitIdx:1, chain:[0,0,0,1], autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
-    [[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-     [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
+    [[3,0,0,0,3,0,0,0,3,0,0,0,3,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+     [0,0,0,0,3,0,0,0,0,0,0,0,3,0,0,0],[0,0,2,0,0,0,2,0,0,0,2,0,0,0,2,0],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1]],
     [[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
      [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],[0,0,1,0,0,0,1,0,0,0,1,0,1,0,1,1],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1]]),
-   bassLines:mkBass({2:12,6:12,10:12,14:12,15:19}),
+   bassLines:mkBass({2:{p:12,d:1,v:1},6:{p:12,d:1,v:1},10:{p:12,d:1,v:2},14:{p:12,d:1,v:1},15:{p:19,d:1,v:0}}),
    bassPrm:{wave:'sawtooth',cutoff:0.55,res:0.2,decay:0.35}, synthEngine:'bass',
    pump:{on:true,rate:0,depth:0.65,rel:0.35},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:true,revMix:0.18}}},
@@ -2580,7 +2633,7 @@ const PRESETS=[
     [[1,0,0,0,1,0,0,0,1,0,1,0,1,0,1,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
      [0,0,0,0,1,0,0,0,0,0,0,0,1,0,1,1],[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[1,0,0,1,0,0,1,0,0,1,0,0,1,0,1,1]]),
-   bassLines:mkBass({0:9,3:9,6:12,8:9,11:16,14:12}),
+   bassLines:mkBass({0:{p:9,d:2,v:2},3:{p:9,d:1,v:1},6:{p:12,d:1,v:1},8:{p:9,d:2,v:2},11:{p:16,d:1,v:1},14:{p:12,d:2,v:1}}),
    bassPrm:{wave:'sawtooth',cutoff:0.75,res:0.45,decay:0.3}, synthEngine:'bass',
    sat:{on:true,style:1,drive:0.4,tone:0.6,mix:0.55,out:0.5},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:false,revMix:0.3}}},
@@ -2593,7 +2646,7 @@ const PRESETS=[
     [[1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0],[0,0,0,0,1,0,0,0,0,0,0,0,1,0,1,1],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[1,0,1,1,1,0,1,0,1,1,1,0,1,1,1,1],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1]]),
-   bassLines:mkBass({0:0,7:0,10:3,15:5}),
+   bassLines:mkBass({0:{p:0,d:6,v:2},7:{p:0,d:3,v:1},10:{p:3,d:4,v:2},15:{p:5,d:1,v:1}}),
    bassPrm:{wave:'sawtooth',cutoff:0.4,res:0.3,decay:0.8}, synthEngine:'bass',
    tape:{on:true,div:0,fb:0.5,tone:0.5,wow:0.15,mix:0.22,ping:true},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:true,revMix:0.15}}},
@@ -2606,7 +2659,7 @@ const PRESETS=[
     [[1,0,0,0,0,0,0,1,0,0,1,0,0,1,0,0],[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,1],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0],[1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0]]),
-   bassLines:mkBass({0:0,10:0,13:3}),
+   bassLines:mkBass({0:{p:0,d:4,v:2},10:{p:0,d:2,v:1},13:{p:3,d:3,v:2}}),
    bassPrm:{wave:'sawtooth',cutoff:0.45,res:0.15,decay:0.6}, synthEngine:'bass',
    sat:{on:true,style:0,drive:0.3,tone:0.5,mix:0.4,out:0.5},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:false,revMix:0.3}}},
