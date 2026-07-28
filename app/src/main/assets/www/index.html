@@ -312,6 +312,11 @@
   .atrack canvas{flex:1;height:52px;background:var(--inset);border:1px solid var(--line);border-radius:6px;}
   .atrack .btn{padding:8px 12px;font-size:11px;}
   .atrack.armed{border-color:var(--red);box-shadow:0 0 12px rgba(255,59,48,.28);}
+  #spectrum{display:block;width:100%;height:250px;background:#08080c;
+    border:1px solid var(--line);border-radius:8px;}
+  #sprow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:10px;}
+  #sprow .btn{padding:0 12px;min-height:36px;font-size:11px;}
+  #spInfo{font-size:11px;color:var(--cyan);font-weight:800;font-variant-numeric:tabular-nums;}
   #lufsrow{display:flex;gap:12px;align-items:stretch;padding-bottom:16px;flex-wrap:wrap;}
   .lufsbox{background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:10px 16px;
     text-align:center;min-width:130px;box-shadow:inset 0 3px 8px rgba(0,0,0,.7);}
@@ -833,6 +838,16 @@
       </div>
     </div>
     <p class="labhint">Visez &minus;14 LUFS pour le streaming, &minus;8 &agrave; &minus;6 pour un morceau club/hardcore. La r&eacute;duction indique combien le compresseur travaille : 3 &agrave; 6 dB sur les cr&ecirc;tes est un bon rep&egrave;re. Ces r&eacute;glages sont appliqu&eacute;s &agrave; l'export.</p>
+  </div>
+  <div class="panel" style="padding:14px 16px 16px">
+    <div class="ptitle" style="padding:0 0 8px">ANALYSEUR DE SPECTRE <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">o&ugrave; l'&eacute;nergie s'accumule dans votre mix, en temps r&eacute;el</small></div>
+    <canvas id="spectrum" width="1560" height="250"></canvas>
+    <div id="sprow">
+      <button class="btn on" id="spHold">M&Eacute;MOIRE DES CR&Ecirc;TES</button>
+      <button class="btn on" id="spBands">REP&Egrave;RES</button>
+      <button class="btn" id="spReset">&#8630; EFFACER LES CR&Ecirc;TES</button>
+      <span id="spInfo"></span>
+    </div>
   </div>
 </div>
 
@@ -4572,6 +4587,102 @@ makeKnob(document.getElementById('vxTuneK'),document.getElementById('vxTuneV'),
 makeKnob(document.getElementById('vxAirK'),document.getElementById('vxAirV'),
   0.3,v=>{vx.air=v;applyVoice();},v=>Math.round(v*100));
 
+/* ================== ANALYSEUR DE SPECTRE ================== */
+const spAn=AC.createAnalyser();
+spAn.fftSize=4096; spAn.smoothingTimeConstant=0.72;
+spAn.minDecibels=-96; spAn.maxDecibels=-6;
+outGain.connect(spAn);
+const spData=new Uint8Array(spAn.frequencyBinCount);
+let spPeaks=null, spHold=true, spBands=true;
+/* repères de bandes, avec les couleurs des pistes correspondantes */
+const SP_ZONES=[
+  {f0:20,   f1:120,   n:'SUB',      c:'#ff9a2e'},
+  {f0:120,  f1:400,   n:'GRAVES',   c:'#ff6a3d'},
+  {f0:400,  f1:2000,  n:'M\u00c9DIUMS',  c:'#ff2e88'},
+  {f0:2000, f1:7000,  n:'PR\u00c9SENCE', c:'#a04dff'},
+  {f0:7000, f1:20000, n:'AIGUS',    c:'#2ee6ff'},
+];
+const spX = f => Math.log(Math.max(f,20)/20)/Math.log(1000);   /* 20 Hz → 20 kHz, échelle log */
+function drawSpectrum(){
+  const cv=document.getElementById('spectrum'); if(!cv) return;
+  const ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
+  spAn.getByteFrequencyData(spData);
+  const nyq=AC.sampleRate/2, bins=spData.length;
+  if(!spPeaks) spPeaks=new Float32Array(W);
+  ctx.fillStyle='#08080c'; ctx.fillRect(0,0,W,H);
+  /* zones de fréquences en fond */
+  if(spBands){
+    SP_ZONES.forEach(z=>{
+      const x0=spX(z.f0)*W, x1=spX(z.f1)*W;
+      ctx.fillStyle=z.c+'12'; ctx.fillRect(x0,0,x1-x0,H);
+      ctx.fillStyle=z.c+'99'; ctx.font='700 9px sans-serif';
+      ctx.fillText(z.n, x0+5, 13);
+    });
+  }
+  /* grille de fréquences */
+  ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.fillStyle='#6a6a80'; ctx.font='9px sans-serif';
+  [50,100,200,500,1000,2000,5000,10000].forEach(f=>{
+    const x=spX(f)*W;
+    ctx.beginPath(); ctx.moveTo(x,16); ctx.lineTo(x,H-14); ctx.stroke();
+    ctx.fillText(f>=1000?(f/1000)+'k':f, x+3, H-4);
+  });
+  /* lignes de niveau */
+  for(let d=1;d<5;d++){ const y=d/5*H;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  /* courbe remplie */
+  const grad=ctx.createLinearGradient(0,H,0,0);
+  grad.addColorStop(0,'rgba(46,230,255,.08)');
+  grad.addColorStop(0.55,'rgba(160,77,255,.45)');
+  grad.addColorStop(1,'rgba(255,154,46,.85)');
+  ctx.beginPath(); ctx.moveTo(0,H);
+  let loud=0, loudX=0;
+  for(let x=0;x<W;x++){
+    const f=20*Math.pow(1000,x/W);
+    const bin=Math.min(bins-1,Math.round(f/nyq*bins));
+    /* moyenne des bins couverts par ce pixel dans les aigus */
+    const f2=20*Math.pow(1000,(x+1)/W);
+    const b2=Math.min(bins-1,Math.round(f2/nyq*bins));
+    let v=0,c=0;
+    for(let b=bin;b<=Math.max(bin,b2);b++){ v+=spData[b]; c++; }
+    v=(v/Math.max(1,c))/255;
+    if(v>loud){ loud=v; loudX=x; }
+    const y=H-v*(H-20)-8;
+    ctx.lineTo(x,y);
+    if(spHold){ if(v>spPeaks[x]) spPeaks[x]=v; else spPeaks[x]*=0.9985; }
+  }
+  ctx.lineTo(W,H); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=1.4;
+  ctx.beginPath();
+  for(let x=0;x<W;x++){
+    const f=20*Math.pow(1000,x/W);
+    const bin=Math.min(bins-1,Math.round(f/nyq*bins));
+    const y=H-(spData[bin]/255)*(H-20)-8;
+    x?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.stroke(); ctx.lineWidth=1;
+  /* mémoire des crêtes */
+  if(spHold){
+    ctx.strokeStyle='rgba(255,215,80,.75)';
+    ctx.beginPath();
+    for(let x=0;x<W;x++){ const y=H-spPeaks[x]*(H-20)-8; x?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+    ctx.stroke();
+  }
+  /* indication de la zone la plus chargée */
+  const fLoud=20*Math.pow(1000,loudX/W);
+  const zone=SP_ZONES.find(z=>fLoud>=z.f0&&fLoud<z.f1);
+  const inf=document.getElementById('spInfo');
+  if(inf) inf.textContent = loud>0.05
+    ? 'plus forte \u00e9nergie : '+(fLoud>=1000?(fLoud/1000).toFixed(1)+' kHz':Math.round(fLoud)+' Hz')
+      +(zone?' \u2014 '+zone.n:'')
+    : 'silence';
+}
+document.getElementById('spHold').addEventListener('click',function(){
+  spHold=!spHold; this.classList.toggle('on',spHold); });
+document.getElementById('spBands').addEventListener('click',function(){
+  spBands=!spBands; this.classList.toggle('on',spBands); });
+document.getElementById('spReset').addEventListener('click',()=>{
+  if(spPeaks) spPeaks.fill(0); toast('Cr\u00eates effac\u00e9es'); });
+
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
   for(let i=0;i<18;i++) row.appendChild(document.createElement('i')); });
@@ -4603,7 +4714,10 @@ let uiFrame=0;
 (function uiLoop(){
   uiFrame++;
   if(uiFrame%2===0){ tickVu(); tickChMeters(); }   /* 30 i/s suffisent */
-  if(typeof tickLufs==='function' && winIsOpen('master')) tickLufs();
+  if(winIsOpen('master')){
+    if(typeof tickLufs==='function') tickLufs();
+    if(uiFrame%2===0 && typeof drawSpectrum==='function') drawSpectrum();
+  }
   if(typeof tickInMeter==='function' && winIsOpen('audio')) tickInMeter();
   if(uiFrame%6===0 && typeof tickVoice==='function' && winIsOpen('audio')) tickVoice();
   requestAnimationFrame(uiLoop);
