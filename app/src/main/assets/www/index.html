@@ -316,6 +316,8 @@
   <button class="btn green" id="playBtn">&#9654; PLAY</button>
   <button class="btn" id="stopBtn">&#9632; STOP</button>
   <button class="btn red" id="recBtn">&#9679; REC</button>
+  <button class="btn" id="undoBtn" title="Annuler">&#8630;</button>
+  <button class="btn" id="redoBtn" title="R&eacute;tablir">&#8631;</button>
   <div id="vu"><div class="vurow" id="vuL"></div><div class="vurow" id="vuR"></div></div>
   <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="masterKnob"></div><label>MASTER</label><div class="kv" id="masterVal">80</div></div>
   <button class="btn" id="menuBtn">&#9776;</button>
@@ -758,10 +760,11 @@
   <button class="btn" id="mDemo">&#127925; Pattern de d&eacute;mo</button>
   <button class="btn" id="mClear">&#10005; Tout effacer</button>
   <button class="btn" id="mGuide">&#128214; Guide &amp; presets de style</button>
+  <button class="btn" id="mNew">&#10024; Nouveau projet vierge</button>
   <button class="btn" id="mClose">&#8592; Fermer</button>
-  <p>NEXUS Beat Lab v0.9 &mdash; studio : pads, 7 kits, sampler-slicer, s&eacute;quenceur 8/16/32 pas, 8 patterns + mode SONG, enregistrement live, FX master.<br><br>
+  <p>NEXUS Beat Lab v2.3 &mdash; studio : pads, 7 kits, sampler-slicer, s&eacute;quenceur 8/16/32 pas, 8 patterns + mode SONG, enregistrement live, FX master.<br><br>
   Modules : PIANO ROLL (synth&eacute; bass), EQUALIZER 3 bandes, SOUND LAB (pitch, filtre, decay, volume par piste).<br><br>
-  Prochaines &eacute;tapes : courbes d'automation, entr&eacute;e MIDI (n&eacute;cessite un pont natif Android), import de sons par pad, export audio WAV.</p>
+  Votre travail est sauvegard&eacute; automatiquement et restaur&eacute; au prochain lancement. &#8630; annule les 25 derni&egrave;res actions.</p>
 </div>
 <div id="welcome">
   <div id="welbox" class="panel">
@@ -782,6 +785,8 @@
 
 <script>
 'use strict';
+/* stubs remplacés plus bas par le vrai système undo/autosave */
+var pushUndo=function(){}, scheduleAutosave=function(){};
 /* =========================================================
    NEXUS BEAT LAB — étape 1
    Audio : Web Audio API (sons 100% synthétisés, aucun fichier)
@@ -1192,7 +1197,7 @@ function buildGrid(){
       c.dataset.col=s;
       const lvl=+pattern[ti][s]||0;
       if(lvl) c.classList.add('on','v'+lvl);
-      c.addEventListener('pointerdown',e=>{ e.preventDefault();
+      c.addEventListener('pointerdown',e=>{ e.preventDefault(); pushUndo();
         const v=(+pattern[ti][s]||0), nv=(v+1)%4;      // 0 vide → 1 doux → 2 normal → 3 accent
         pattern[ti][s]=nv;
         c.classList.remove('on','v1','v2','v3');
@@ -1226,20 +1231,20 @@ function renderChain(){
     const s=document.createElement('div');
     s.className='chslot'+((i===chainPos&&mode==='song'&&playing)?' cur':'');
     s.textContent='P'+(p+1);
-    s.addEventListener('click',()=>{ chain.splice(i,1);
+    s.addEventListener('click',()=>{ pushUndo(true); chain.splice(i,1);
       if(!chain.length) chain=[curPat];
       chainPos=Math.min(chainPos,chain.length-1); renderChain(); });
     chainSlots.appendChild(s);
   });
 }
 document.getElementById('chainAdd').addEventListener('click',()=>{
-  chain.push(curPat); renderChain(); });
+  pushUndo(true); chain.push(curPat); renderChain(); });
 document.getElementById('copyBtn').addEventListener('click',()=>{
   clip=pattern.map(r=>r.slice());
   toast('P'+(curPat+1)+' copi\u00e9 \u2014 choisissez un autre pattern puis COLLER'); });
 document.getElementById('pasteBtn').addEventListener('click',()=>{
   if(!clip){ toast('Rien \u00e0 coller : utilisez d\u2019abord COPIER'); return; }
-  patterns[curPat]=clip.map(r=>r.slice()); pattern=patterns[curPat]; buildGrid();
+  pushUndo(true); patterns[curPat]=clip.map(r=>r.slice()); pattern=patterns[curPat]; buildGrid();
   toast('Coll\u00e9 dans P'+(curPat+1)); });
 
 /* ---------- horloge / lecture ---------- */
@@ -1298,7 +1303,7 @@ const playBtn=document.getElementById('playBtn');
 playBtn.addEventListener('click',()=>playing?stop():play());
 document.getElementById('stopBtn').addEventListener('click',stop);
 document.getElementById('clearBtn').addEventListener('click',()=>{
-  patterns[curPat]=emptyPat(); pattern=patterns[curPat]; buildGrid();
+  pushUndo(true); patterns[curPat]=emptyPat(); pattern=patterns[curPat]; buildGrid();
   toast('P'+(curPat+1)+' effac\u00e9'); });
 
 /* ---------- enregistrement live (REC) ---------- */
@@ -1328,7 +1333,7 @@ function recordHit(soundName){
   const ti=REC_MAP[soundName]; if(ti===undefined) return;
   const len=patLens[curPat];
   const idx=((Math.round((AC.currentTime-playStart)/stepDur()))%len+len)%len;
-  if(!pattern[ti][idx]){ pattern[ti][idx]=2;
+  if(!pattern[ti][idx]){ pushUndo(); pattern[ti][idx]=2;
     const el=stepEls[ti]&&stepEls[ti][idx]; if(el) el.classList.add('on'); }
 }
 
@@ -1504,7 +1509,7 @@ function renderPiano(){
           if(prev){ cell.classList.add('on','tail'); break; }
         }
       }
-      cell.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
+      cell.addEventListener('pointerdown',e=>{ e.preventDefault(); resume(); pushUndo();
         const cur=noteArr(line[c]);
         if(cur.some(n=>n.p===semi)){
           const left=cur.filter(n=>n.p!==semi);
@@ -1615,7 +1620,7 @@ const kLabPit=makeKnob(document.getElementById('labPitK'),document.getElementByI
   0.5,v=>sndParams[selTrack].semi=Math.round(v*24-12),
   v=>{const s=Math.round(v*24-12);return (s>0?'+':'')+s;});
 const kLabCut=makeKnob(document.getElementById('labCutK'),document.getElementById('labCutV'),
-  1,v=>sndParams[selTrack].cutoff=v,v=>Math.round(v*100));
+  1,v=>{sndParams[selTrack].cutoff=v;scheduleAutosave();},v=>Math.round(v*100));
 const kLabDec=makeKnob(document.getElementById('labDecK'),document.getElementById('labDecV'),
   1,v=>sndParams[selTrack].decay=v,v=>Math.round(v*100));
 const kLabVol=makeKnob(document.getElementById('labVolK'),document.getElementById('labVolV'),
@@ -1633,7 +1638,7 @@ const kLabMd=makeKnob(document.getElementById('labMdK'),document.getElementById(
 const kLabHi=makeKnob(document.getElementById('labHiK'),document.getElementById('labHiV'),
   0.5,v=>{ trackEQ[selTrack].hi.gain.value=v*30-15; drawLabEq(); },v=>(v*30-15).toFixed(0)+'dB');
 document.getElementById('labMute').addEventListener('click',()=>{
-  trackMute[selTrack]=!trackMute[selTrack]; buildGrid(); labSync();
+  pushUndo(true); trackMute[selTrack]=!trackMute[selTrack]; buildGrid(); labSync();
   if(winIsOpen('perf')) renderPerform(); });
 document.getElementById('labSolo').addEventListener('click',()=>{
   trackSolo[selTrack]=!trackSolo[selTrack]; labSync();
@@ -1643,6 +1648,7 @@ document.getElementById('labTest').addEventListener('click',()=>{
 
 /* ---------- choix du nombre de pas (8/16/32) ---------- */
 document.getElementById('stepsCell').addEventListener('click',()=>{
+  pushUndo(true);
   const order=[8,16,32];
   patLens[curPat]=order[(order.indexOf(patLens[curPat])+1)%order.length];
   buildGrid(); if(winIsOpen('piano')) renderPiano();
@@ -2102,7 +2108,7 @@ document.getElementById('autoOn').addEventListener('click',function(){
   if(!autoOn) AUTO_TARGETS.forEach(t=>t.apply(t.def));
   toast(autoOn?'Automation active':'Automation d\u00e9sactiv\u00e9e'); });
 document.getElementById('autoClear').addEventListener('click',()=>{
-  autoData[curPat][autoTgt].fill(null); drawAuto();
+  pushUndo(true); autoData[curPat][autoTgt].fill(null); drawAuto();
   AUTO_TARGETS[autoTgt].apply(AUTO_TARGETS[autoTgt].def);
   toast(AUTO_TARGETS[autoTgt].name+' : courbe effac\u00e9e'); });
 const autocv=document.getElementById('autocv');
@@ -2129,6 +2135,7 @@ function drawAuto(){
   ctx.fillText('100%',8,18); ctx.fillText('0%',8,H-8);
 }
 function autoPaint(e){
+  pushUndo();
   const r=autocv.getBoundingClientRect(), len=patLens[curPat];
   const s=Math.max(0,Math.min(len-1,Math.floor((e.clientX-r.left)/r.width*len)));
   const v=Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height));
@@ -2792,7 +2799,84 @@ function closeWelcome(){ welcomeEl.classList.remove('open');
 document.getElementById('welGo').addEventListener('click',closeWelcome);
 document.getElementById('mGuide').addEventListener('click',()=>{
   openMenu(false); welcomeEl.classList.add('open'); });
+document.getElementById('mNew').addEventListener('click',()=>{
+  pushUndo(true);
+  patterns=Array.from({length:NPAT},emptyPat);
+  bassLines=Array.from({length:NPAT},()=>Array(MAXSTEPS).fill(null));
+  autoData=Array.from({length:NPAT},()=>AUTO_TARGETS.map(()=>Array(MAXSTEPS).fill(null)));
+  chain=[0]; chainPos=0; patLens=Array(NPAT).fill(16);
+  selectPattern(0); renderChain(); scheduleAutosave();
+  toast('Nouveau projet — tout est vierge (annulable)'); openMenu(false); });
 if(!localStorage.getItem('nbl-seen')) welcomeEl.classList.add('open');
+
+/* ================== UNDO GLOBAL + AUTOSAVE ================== */
+const UNDO_MAX=25;
+let undoStack=[], redoStack=[], undoBusy=false, undoLast=0;
+function snap(){ return JSON.stringify(projectData()); }
+function refreshUndoBtns(){
+  document.getElementById('undoBtn').style.opacity = undoStack.length?1:0.35;
+  document.getElementById('redoBtn').style.opacity = redoStack.length?1:0.35;
+}
+/* à appeler AVANT une modification ; regroupe les gestes rapprochés (<400 ms) */
+pushUndo=function(force){
+  if(undoBusy) return;
+  const now=performance.now();
+  if(!force && now-undoLast<400 && undoStack.length){ undoLast=now; return; }
+  undoLast=now;
+  undoStack.push(snap());
+  if(undoStack.length>UNDO_MAX) undoStack.shift();
+  redoStack.length=0;
+  refreshUndoBtns();
+  scheduleAutosave();
+};
+function restoreSnap(s){
+  undoBusy=true;
+  try{ applyProject(JSON.parse(s)); }catch(e){ toast('Restauration impossible'); }
+  undoBusy=false;
+  refreshUndoBtns();
+}
+document.getElementById('undoBtn').addEventListener('click',()=>{
+  if(!undoStack.length){ toast('Rien \u00e0 annuler'); return; }
+  redoStack.push(snap());
+  restoreSnap(undoStack.pop());
+  toast('Annul\u00e9');
+});
+document.getElementById('redoBtn').addEventListener('click',()=>{
+  if(!redoStack.length){ toast('Rien \u00e0 r\u00e9tablir'); return; }
+  undoStack.push(snap());
+  restoreSnap(redoStack.pop());
+  toast('R\u00e9tabli');
+});
+document.addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey)) return;
+  if(e.key==='z'&&!e.shiftKey){ e.preventDefault(); document.getElementById('undoBtn').click(); }
+  else if(e.key==='y'||(e.key==='z'&&e.shiftKey)){ e.preventDefault(); document.getElementById('redoBtn').click(); }
+});
+/* ---------- autosave : reprise automatique du travail en cours ---------- */
+let autosaveT=null;
+scheduleAutosave=function(){
+  if(undoBusy) return;
+  clearTimeout(autosaveT);
+  autosaveT=setTimeout(()=>{
+    try{ localStorage.setItem('nbl-auto',JSON.stringify(
+      {t:Date.now(), d:projectData()})); }catch(e){}
+  },1500);
+};
+function tryRestoreAutosave(){
+  let raw=null; try{ raw=localStorage.getItem('nbl-auto'); }catch(e){}
+  if(!raw) return false;
+  try{
+    const a=JSON.parse(raw);
+    applyProject(a.d);
+    const min=Math.round((Date.now()-a.t)/60000);
+    toast('Travail restaur\u00e9 automatiquement'+(min<600?' ('+(min<1?'\u00e0 l\u2019instant':'il y a '+min+' min')+')':''));
+    return true;
+  }catch(e){ return false; }
+}
+window.addEventListener('beforeunload',()=>{
+  try{ localStorage.setItem('nbl-auto',JSON.stringify({t:Date.now(), d:projectData()})); }catch(e){}
+});
+refreshUndoBtns();
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
@@ -2849,6 +2933,7 @@ document.getElementById('mDemo').addEventListener('click',()=>{
   chain=[0,0,1,0]; chainPos=0; selectPattern(0); renderChain();
   toast('D\u00e9mo : P1 groove, P2 fill, cha\u00eene 1-1-2-1'); openMenu(false); });
 document.getElementById('mClear').addEventListener('click',()=>{
+  pushUndo(true);
   patterns=Array.from({length:NPAT},emptyPat); chain=[0]; chainPos=0;
   bassLines=Array.from({length:NPAT},()=>Array(MAXSTEPS).fill(null));
   selectPattern(0); renderChain(); openMenu(false); });
@@ -2859,7 +2944,8 @@ patterns[1]=pad32(DEMO2);
 chain=[0,0,1,0];
 selectPattern(0);
 renderChain();
-loadKit(0);
+if(!tryRestoreAutosave()) loadKit(0);
+undoStack=[]; redoStack=[]; refreshUndoBtns();
 </script>
 </body>
 </html>
