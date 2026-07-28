@@ -162,11 +162,15 @@
   .mwhead small{color:var(--dim);font-weight:400;letter-spacing:0;margin-left:8px;}
   #prollpan{flex:1;padding:12px;}
   #proll{display:flex;gap:4px;}
-  #prkeys{display:grid;grid-auto-rows:25px;width:56px;gap:1px;}
+  #prtools{display:flex;align-items:center;gap:10px;padding:0 0 10px;flex-wrap:wrap;}
+  .prtlbl{font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--dim);}
+  #prchords,#prmodes{display:flex;gap:6px;}
+  #prchords .btn,#prmodes .btn{padding:8px 11px;font-size:10px;}
+  #prkeys{display:grid;grid-auto-rows:22px;width:56px;gap:1px;}
   .prkey{font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;
     background:#dfdfe6;color:#222;border-radius:3px 0 0 3px;}
   .prkey.blk{background:#33333d;color:#9a9ab0;}
-  #prgrid{flex:1;display:grid;grid-auto-rows:25px;gap:1px;}
+  #prgrid{flex:1;display:grid;grid-auto-rows:22px;gap:1px;}
   .prcell{background:#1e1e26;border-radius:3px;cursor:pointer;border:1px solid #2b2b34;}
   .prcell.q{background:#262631;}
   .prcell.blkrow{filter:brightness(.82);}
@@ -346,7 +350,7 @@
 <!-- ====== FENETRES MODULES ====== -->
 <div class="modwin" id="win-piano">
   <div class="panel mwhead">
-    <span>&#127929; PIANO ROLL <small>synth&eacute; bass &middot; pattern P<span id="prPat">1</span> &middot; touchez une case pour poser ou retirer une note</small></span>
+    <span>&#127929; PIANO ROLL <small>pattern P<span id="prPat">1</span> &middot; 3 octaves &middot; accords et arp&egrave;ges : choisissez un outil puis touchez la grille</small></span>
     <span style="flex:1"></span>
     <button class="btn" id="prWave">SAW</button>
     <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="prCutK"></div><label>CUTOFF</label><div class="kv" id="prCutV">60</div></div>
@@ -355,7 +359,13 @@
     <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="prVolK"></div><label>VOLUME</label><div class="kv" id="prVolV">80</div></div>
     <button class="btn" data-win="studio">&#8592; STUDIO</button>
   </div>
-  <div class="panel" id="prollpan"><div id="proll"><div id="prkeys"></div><div id="prgrid"></div></div></div>
+  <div class="panel" id="prollpan">
+    <div id="prtools">
+      <span class="prtlbl">ACCORD</span><div id="prchords"></div>
+      <span class="prtlbl">MODE</span><div id="prmodes"></div>
+    </div>
+    <div id="proll"><div id="prkeys"></div><div id="prgrid"></div></div>
+  </div>
 </div>
 
 <div class="modwin" id="win-eq">
@@ -983,7 +993,8 @@ function scheduler(){
       AUTO_TARGETS.forEach((tg,ti)=>{ const v=ad[ti][step]; if(v!==null) tg.apply(v); }); }
     TRACKS.forEach((trk,ti)=>{ if(pattern[ti][step] && !trackMute[ti]) playTrack(ti,t); });
     const bn=bassLines[curPat][step];
-    if(bn!==null && bn!==undefined) playSynth(bn,t);
+    if(bn!==null && bn!==undefined)
+      (Array.isArray(bn)?bn:[bn]).forEach(n=>playSynth(n,t));
     highlight(step);
     step=(step+1)%len; nextTime+=stepDur();
     if(step===0 && mode==='song' && chain.length>1){
@@ -1131,9 +1142,44 @@ function switchWin(w){
 document.querySelectorAll('[data-win]').forEach(b=>
   b.addEventListener('click',()=>switchWin(b.dataset.win)));
 
-/* ---------- PIANO ROLL ---------- */
+/* ---------- PIANO ROLL : 3 octaves, accords, arpégiateur ---------- */
 const NOTE_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-const PR_ROWS=24;
+const PR_ROWS=36;
+const CHORDS=[
+  {n:'NOTE',   iv:[0]},
+  {n:'MIN',    iv:[0,3,7]},
+  {n:'MAJ',    iv:[0,4,7]},
+  {n:'MIN7',   iv:[0,3,7,10]},
+  {n:'MAJ7',   iv:[0,4,7,11]},
+  {n:'QUINTE', iv:[0,7,12]},
+];
+const PRMODES=[{id:'bloc',n:'BLOC'},{id:'up',n:'ARP \u2191'},{id:'down',n:'ARP \u2193'},{id:'updown',n:'ARP \u2195'}];
+let prChord=0, prMode='bloc';
+const prchordsEl=document.getElementById('prchords'), prmodesEl=document.getElementById('prmodes');
+CHORDS.forEach((ch,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===0?' on':''); b.textContent=ch.n;
+  b.addEventListener('click',()=>{ prChord=i;
+    [...prchordsEl.children].forEach((x,j)=>x.classList.toggle('on',j===i)); });
+  prchordsEl.appendChild(b); });
+PRMODES.forEach((m,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===0?' on':''); b.textContent=m.n;
+  b.addEventListener('click',()=>{ prMode=m.id;
+    [...prmodesEl.children].forEach((x,j)=>x.classList.toggle('on',j===i)); });
+  prmodesEl.appendChild(b); });
+function noteArr(v){ return v===null||v===undefined ? [] : (Array.isArray(v)?v:[v]); }
+function placeNotes(line,c,semi,len){
+  const notes=CHORDS[prChord].iv.map(iv=>semi+iv).filter(n=>n<PR_ROWS);
+  if(prMode==='bloc'){
+    line[c]=notes.slice();
+    notes.forEach(n=>playSynth(n,AC.currentTime));
+  }else{
+    let seq=notes.slice();
+    if(prMode==='down') seq.reverse();
+    if(prMode==='updown') seq=notes.concat(notes.slice(1,-1).reverse());
+    for(let k=0;k<seq.length && c+k<len;k++) line[c+k]=[seq[k]];
+    playSynth(seq[0],AC.currentTime);
+  }
+}
 const prkeys=document.getElementById('prkeys'), prgrid=document.getElementById('prgrid');
 function renderPiano(){
   document.getElementById('prPat').textContent=curPat+1;
@@ -1153,10 +1199,13 @@ function renderPiano(){
       const cell=document.createElement('div');
       cell.className='prcell'+(Math.floor(c/4)%2===0?' q':'')+(isBlk?' blkrow':'');
       cell.dataset.pc=c;
-      if(line[c]===semi) cell.classList.add('on');
+      if(noteArr(line[c]).includes(semi)) cell.classList.add('on');
       cell.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
-        if(line[c]===semi) line[c]=null;
-        else { line[c]=semi; playSynth(semi,AC.currentTime); }
+        const cur=noteArr(line[c]);
+        if(cur.includes(semi)){
+          const left=cur.filter(n=>n!==semi);
+          line[c]=left.length?left:null;
+        } else placeNotes(line,c,semi,len);
         renderPiano(); });
       prgrid.appendChild(cell);
     }
@@ -1316,7 +1365,8 @@ function scheduleOffline(nodes, seq, loops){
         const vd=ad[3][s]; if(vd!==null&&fx.dly) nodes.delayWet.gain.setValueAtTime(vd*0.9,t);
         const vb=ad[4][s]; if(vb!==null) bassPrm.cutoff=vb; }
       TRACKS.forEach((trk,ti)=>{ if(pat[ti][s]&&!trackMute[ti]) playTrack(ti,tt,nodes.trackOuts[ti]); });
-      const bn=line[s]; if(bn!==null&&bn!==undefined) playSynth(bn,tt,nodes.bassOut);
+      const bn=line[s]; if(bn!==null&&bn!==undefined)
+        (Array.isArray(bn)?bn:[bn]).forEach(n=>playSynth(n,tt,nodes.bassOut));
       t+=sd;
     }
   }
