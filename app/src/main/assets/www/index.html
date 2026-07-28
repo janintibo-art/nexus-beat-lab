@@ -268,6 +268,21 @@
   .perfbtn.off{background:linear-gradient(180deg,#3d1418,#2a0d10);border-color:var(--red);color:var(--red);}
   .perfbtn.fxon{background:linear-gradient(180deg,var(--green),#1fa668);color:#06281a;border-color:#7cf2bc;
     box-shadow:0 0 14px rgba(57,217,138,.5);}
+  #plwrap{overflow-x:auto;}
+  #plruler,#plgrid{display:grid;gap:3px;min-width:100%;}
+  #plruler{margin-bottom:4px;}
+  .plnum{font-size:9px;color:var(--dim);text-align:center;font-weight:700;}
+  .plnum.b4{color:var(--txt);}
+  .plnum.head{text-align:left;padding-left:4px;}
+  .plrow{display:contents;}
+  .pllbl{font-size:11px;font-weight:800;letter-spacing:1px;display:flex;align-items:center;
+    padding-left:4px;cursor:pointer;}
+  .pllbl.sel{color:#111;background:var(--orange);border-radius:5px;padding:0 6px;}
+  .plcell{height:30px;border-radius:5px;background:linear-gradient(180deg,#2c2c37,#232330);
+    border:1px solid #40404e;cursor:pointer;}
+  .plcell.b4{border-left-color:#5a5a6c;}
+  .plcell.on{border-color:#fff;}
+  .plcell.ph{outline:2px solid var(--orange);outline-offset:-2px;}
 
   /* ---------- menu ---------- */
   #menuBtn{font-size:18px;padding:9px 15px;}
@@ -336,6 +351,7 @@
   <button class="btn" data-win="rack">&#127899; FX RACK</button>
   <button class="btn" data-win="midi">&#127932; MIDI</button>
   <button class="btn" data-win="perf">&#128293; PERFORM</button>
+  <button class="btn" data-win="pl">&#127916; PLAYLIST</button>
   <button class="btn" data-win="export">&#128190; EXPORT</button>
   <span style="flex:1"></span>
   <span class="mbhint">naviguez entre les modules &mdash; la lecture continue en fond</span>
@@ -747,6 +763,26 @@
   <div class="panel" style="padding:16px">
     <div class="ptitle" style="padding:0 0 10px">EFFETS PUNCH-IN</div>
     <div id="perfFx"></div>
+  </div>
+</div>
+<div class="modwin" id="win-pl">
+  <div class="panel mwhead">
+    <span>&#127916; PLAYLIST <small>construisez votre morceau : une ligne par pattern, une colonne par mesure</small></span>
+    <span style="flex:1"></span>
+    <button class="btn" id="plMode">MODE PLAYLIST</button>
+    <button class="btn" id="plLen">32 MESURES</button>
+    <button class="btn" id="plDup">DUPLIQUER 1&rarr;2</button>
+    <button class="btn" id="plClear">&#10005; VIDER</button>
+    <button class="btn green" id="plPlay">&#9654; PLAY</button>
+    <button class="btn" data-win="studio">&#8592; STUDIO</button>
+  </div>
+  <div class="panel" style="padding:14px">
+    <div id="plwrap">
+      <div id="plruler"></div>
+      <div id="plgrid"></div>
+    </div>
+    <p class="labhint">Touchez une case pour poser ou retirer un clip &middot; <b>DUPLIQUER</b> recopie la premi&egrave;re moiti&eacute; sur la seconde (structure couplet-refrain instantan&eacute;e) &middot; La t&ecirc;te de lecture avance mesure par mesure et le pattern suit automatiquement.
+    Activez <b>MODE PLAYLIST</b> pour que le transport joue l'arrangement au lieu du pattern seul.</p>
   </div>
 </div>
 </div><!-- /stage -->
@@ -1222,6 +1258,7 @@ function selectPattern(i,fromChain){
   if(winIsOpen('piano')) renderPiano();
   if(winIsOpen('auto')) drawAuto();
   if(winIsOpen('perf')) renderPerform();
+  if(winIsOpen('pl')&&typeof renderPl==='function') renderPl();
   if(!fromChain){ document.getElementById('chainAddN').textContent=i+1; }
 }
 const chainSlots=document.getElementById('chainSlots');
@@ -1266,11 +1303,17 @@ function scheduler(){
     if(bn!==null && bn!==undefined) noteArr(bn).forEach(n=>playNoteObj(n,t));
     highlight(step);
     step=(step+1)%len; nextTime+=stepDur();
-    if(step===0 && mode==='pattern' && pendingPat>=0){
+    if(step===0 && plActive){
+      const np=plNext();
+      if(np>=0 && np!==curPat) selectPattern(np,true);
+      if(winIsOpen('pl')) renderPl();
+    }
+    if(step===0 && mode==='pattern' && !plActive && pendingPat>=0){
       selectPattern(pendingPat); pendingPat=-1;
       if(winIsOpen('perf')) renderPerform();
+  if(winIsOpen('pl')&&typeof renderPl==='function') renderPl();
     }
-    if(step===0 && mode==='song' && chain.length>1){
+    if(step===0 && mode==='song' && !plActive && chain.length>1){
       chainPos=(chainPos+1)%chain.length;
       selectPattern(chain[chainPos],true); renderChain();
     }
@@ -1288,11 +1331,14 @@ function highlight(s){
 }
 function play(){ resume(); if(playing) return; playing=true; step=0; nextTime=AC.currentTime+0.06;
   playStart=nextTime;
-  if(mode==='song'&&chain.length){ chainPos=0; selectPattern(chain[0],true); renderChain(); }
+  if(plActive){ let f=-1; for(let c=0;c<plLen;c++) if(plPatAt(c)>=0){f=c;break;}
+    if(f>=0){ plPos=f; selectPattern(plPatAt(f),true); } if(winIsOpen('pl')) renderPl(); }
+  else if(mode==='song'&&chain.length){ chainPos=0; selectPattern(chain[0],true); renderChain(); }
   startAudioPlayback(playStart);
   timer=setInterval(scheduler,LOOKAHEAD); playBtn.classList.add('on'); }
 function stop(){ playing=false; clearInterval(timer);
   playBtn.classList.remove('on'); renderChain();
+  if(typeof renderPl==='function'&&winIsOpen('pl')) renderPl();
   stopAudioPlayback();
   pumpU.reset();
   if(audioRecording){ stopAudioRec(); recBtn.classList.remove('on'); }
@@ -1420,7 +1466,8 @@ function switchWin(w){
     if(w==='edit') drawEditor();
     if(w==='lab') labSync();
     if(w==='midi') midiRefresh();
-    if(w==='perf') renderPerform(); }
+    if(w==='perf') renderPerform();
+    if(w==='pl') renderPl(); }
   window.scrollTo(0,0);
 }
 document.querySelectorAll('[data-win]').forEach(b=>
@@ -1639,7 +1686,8 @@ const kLabHi=makeKnob(document.getElementById('labHiK'),document.getElementById(
   0.5,v=>{ trackEQ[selTrack].hi.gain.value=v*30-15; drawLabEq(); },v=>(v*30-15).toFixed(0)+'dB');
 document.getElementById('labMute').addEventListener('click',()=>{
   pushUndo(true); trackMute[selTrack]=!trackMute[selTrack]; buildGrid(); labSync();
-  if(winIsOpen('perf')) renderPerform(); });
+  if(winIsOpen('perf')) renderPerform();
+  if(winIsOpen('pl')&&typeof renderPl==='function') renderPl(); });
 document.getElementById('labSolo').addEventListener('click',()=>{
   trackSolo[selTrack]=!trackSolo[selTrack]; labSync();
   toast(anySolo()?'SOLO actif \u2014 seules les pistes en solo sonnent':'Solo d\u00e9sactiv\u00e9'); });
@@ -1852,7 +1900,7 @@ function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bass
     m:trackMute[ti], s:trackSolo[ti]})),
   autoData, autoOn, mst:{...mst},
   wt:{...wt}, synthEngine, sat:{...sat}, tape:{...tape}, mod:{...mod}, pump:{...pump},
-  fx:{...fx}, swing, kitIdx}; }
+  fx:{...fx}, swing, kitIdx, clips, plLen, plActive}; }
 function applyProject(d){
   setBpm(d.bpm||128);
   if(d.patterns){ patterns=d.patterns.map(p=>pad32(p)); }
@@ -1893,6 +1941,13 @@ function applyProject(d){
     trackMute[ti]=!!c.m; trackSolo[ti]=!!c.s; });
   if(d.chan){ if(typeof syncMixer==='function') syncMixer();
     if(typeof labSync==='function') labSync(); }
+  if(d.clips){ clips=d.clips.map(r=>{ const a=r.slice(0,64);
+      while(a.length<64) a.push(false); return a; }); }
+  if(typeof d.plLen==='number') plLen=d.plLen;
+  if(typeof d.plActive==='boolean') plActive=d.plActive;
+  if(d.clips&&typeof renderPl==='function'){
+    document.getElementById('plMode').classList.toggle('on',plActive);
+    document.getElementById('plLen').textContent=plLen+' MESURES'; renderPl(); }
   if(typeof d.swing==='number'){ swing=d.swing; kSwing.set(swing); }
   if(d.fx){ Object.assign(fx,d.fx); applyFx();
     document.getElementById('fxDist').classList.toggle('on',fx.dist);
@@ -2731,9 +2786,13 @@ function mkBass(notes){ const b=Array.from({length:NPAT},()=>Array(MAXSTEPS).fil
   Object.keys(notes).forEach(s=>{ const n=notes[s]; b[0][+s]=Array.isArray(n)?n:[n]; });
   return b; }
 function mkAuto(){ return Array.from({length:NPAT},()=>AUTO_TARGETS.map(()=>Array(MAXSTEPS).fill(null))); }
+/* arrangement type : P1 x3 + P2, sur 16 mesures */
+function mkClips(){ const c=Array.from({length:NPAT},()=>Array(64).fill(false));
+  for(let m=0;m<16;m++){ const p=(m%4===3)?1:0; c[p][m]=true; }
+  return c; }
 const PRESETS=[
  {name:'HOUSE', desc:'124 BPM \u00b7 kit 909 \u00b7 pompage sidechain, basse offbeat',
-  data:{bpm:124, swing:0.12, kitIdx:1, chain:[0,0,0,1], autoData:mkAuto(), autoOn:false,
+  data:{bpm:124, swing:0.12, kitIdx:1, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
     [[3,0,0,0,3,0,0,0,3,0,0,0,3,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
      [0,0,0,0,3,0,0,0,0,0,0,0,3,0,0,0],[0,0,2,0,0,0,2,0,0,0,2,0,0,0,2,0],
@@ -2746,7 +2805,7 @@ const PRESETS=[
    pump:{on:true,rate:0,depth:0.65,rel:0.35},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:true,revMix:0.18}}},
  {name:'HARDTEK', desc:'175 BPM \u00b7 kick tribe, saturation tube, acid line',
-  data:{bpm:175, swing:0, kitIdx:3, chain:[0,0,0,1], autoData:mkAuto(), autoOn:false,
+  data:{bpm:175, swing:0, kitIdx:3, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
     [[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
      [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
@@ -2759,7 +2818,7 @@ const PRESETS=[
    sat:{on:true,style:1,drive:0.4,tone:0.6,mix:0.55,out:0.5},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:false,revMix:0.3}}},
  {name:'DRUM & BASS', desc:'174 BPM \u00b7 break rapide, basse profonde, tape delay',
-  data:{bpm:174, swing:0.08, kitIdx:5, chain:[0,0,0,1], autoData:mkAuto(), autoOn:false,
+  data:{bpm:174, swing:0.08, kitIdx:5, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
     [[1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1],
@@ -2772,7 +2831,7 @@ const PRESETS=[
    tape:{on:true,div:0,fb:0.5,tone:0.5,wow:0.15,mix:0.22,ping:true},
    fx:{dist:false,drive:0.3,dly:false,dlyMix:0.35,rev:true,revMix:0.15}}},
  {name:'BOOM BAP', desc:'90 BPM \u00b7 swing prononc\u00e9, chaleur 808, t\u00eate qui hoche',
-  data:{bpm:90, swing:0.42, kitIdx:0, chain:[0,0,0,1], autoData:mkAuto(), autoOn:false,
+  data:{bpm:90, swing:0.42, kitIdx:0, chain:[0,0,0,1], clips:mkClips(), plLen:16, autoData:mkAuto(), autoOn:false,
    patterns:mkPatterns(
     [[1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],
@@ -2877,6 +2936,77 @@ window.addEventListener('beforeunload',()=>{
   try{ localStorage.setItem('nbl-auto',JSON.stringify({t:Date.now(), d:projectData()})); }catch(e){}
 });
 refreshUndoBtns();
+
+/* ================== PLAYLIST : arrangement visuel ================== */
+let plLen=32;                                   // nombre de mesures
+let clips=Array.from({length:NPAT},()=>Array(64).fill(false));
+let plActive=false, plPos=0;
+const plruler=document.getElementById('plruler'), plgrid=document.getElementById('plgrid');
+function plCols(){ return `92px repeat(${plLen},minmax(26px,1fr))`; }
+function renderPl(){
+  plruler.style.gridTemplateColumns=plCols();
+  plgrid.style.gridTemplateColumns=plCols();
+  plruler.innerHTML=''; plgrid.innerHTML='';
+  const h0=document.createElement('div'); h0.className='plnum head'; h0.textContent='MESURE';
+  plruler.appendChild(h0);
+  for(let c=0;c<plLen;c++){ const n=document.createElement('div');
+    n.className='plnum'+(c%4===0?' b4':''); n.textContent=c+1;
+    n.dataset.plc=c; plruler.appendChild(n); }
+  for(let p=0;p<NPAT;p++){
+    const lb=document.createElement('div');
+    lb.className='pllbl'+(p===curPat?' sel':''); lb.textContent='P'+(p+1);
+    lb.style.color=p===curPat?'':'var(--dim)';
+    lb.addEventListener('click',()=>{ selectPattern(p); renderPl(); });
+    plgrid.appendChild(lb);
+    for(let c=0;c<plLen;c++){
+      const cell=document.createElement('div');
+      cell.className='plcell'+(c%4===0?' b4':'')+(clips[p][c]?' on':'');
+      cell.dataset.plc=c;
+      if(clips[p][c]){
+        const col=['#ff9a2e','#ff2e88','#a04dff','#2ee6ff','#39d98a','#ffd83a','#ff6a3d','#8c9eff'][p];
+        cell.style.background=`linear-gradient(180deg, color-mix(in srgb,${col} 88%, #fff), color-mix(in srgb,${col} 60%, #000))`;
+      }
+      cell.addEventListener('pointerdown',e=>{ e.preventDefault(); pushUndo();
+        const on=!clips[p][c];
+        if(on) for(let q=0;q<NPAT;q++) clips[q][c]=false;   // une seule scène par mesure
+        clips[p][c]=on; renderPl(); });
+      plgrid.appendChild(cell);
+    }
+  }
+  plHighlight(plActive&&playing?plPos:-1);
+}
+function plHighlight(c){
+  document.querySelectorAll('#plwrap .ph').forEach(e=>e.classList.remove('ph'));
+  if(c<0) return;
+  document.querySelectorAll(`#plwrap [data-plc="${c}"]`).forEach(e=>e.classList.add('ph'));
+}
+function plPatAt(c){ for(let p=0;p<NPAT;p++) if(clips[p][c]) return p; return -1; }
+function plNext(){                                    // avance d'une mesure, saute les vides
+  for(let k=1;k<=plLen;k++){
+    const c=(plPos+k)%plLen;
+    if(plPatAt(c)>=0){ plPos=c; return plPatAt(c); }
+  }
+  return -1;
+}
+document.getElementById('plMode').addEventListener('click',function(){
+  plActive=!plActive; this.classList.toggle('on',plActive);
+  if(plActive){ const first=plPatAt(0)>=0?0:-1;
+    plPos = first>=0?0:0;
+    toast('Mode PLAYLIST : le transport joue l\u2019arrangement'); }
+  else toast('Retour au mode pattern');
+  renderPl(); });
+document.getElementById('plLen').addEventListener('click',function(){
+  const o=[16,32,64]; plLen=o[(o.indexOf(plLen)+1)%o.length];
+  this.textContent=plLen+' MESURES'; renderPl(); });
+document.getElementById('plDup').addEventListener('click',()=>{
+  pushUndo(true); const half=plLen>>1;
+  for(let p=0;p<NPAT;p++) for(let c=0;c<half;c++) clips[p][half+c]=clips[p][c];
+  renderPl(); toast('Premi\u00e8re moiti\u00e9 dupliqu\u00e9e sur la seconde'); });
+document.getElementById('plClear').addEventListener('click',()=>{
+  pushUndo(true); clips=Array.from({length:NPAT},()=>Array(64).fill(false));
+  renderPl(); toast('Playlist vid\u00e9e'); });
+document.getElementById('plPlay').addEventListener('click',()=>{
+  playing?stop():play(); renderPl(); });
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
