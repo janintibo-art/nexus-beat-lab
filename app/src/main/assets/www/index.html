@@ -235,11 +235,11 @@
   /* ---------- modules / fenêtres ---------- */
   #modbar{padding:5px 6px;display:flex;gap:5px;align-items:center;margin-bottom:var(--gap);
     position:sticky;top:62px;z-index:24;backdrop-filter:blur(8px);}
-  .modgrp{display:flex;gap:3px;align-items:center;padding:3px 6px;border-radius:9px;
+  .modgrp{display:flex;gap:3px;align-items:center;padding:3px 5px;border-radius:9px;
     background:rgba(255,255,255,.04);border:1px solid var(--line-soft);}
-  .modlbl{font-size:7.5px;font-weight:800;letter-spacing:1px;color:#7c7c92;
-    padding-right:3px;white-space:nowrap;}
-  #modbar .btn{flex:0 0 auto;font-size:10px;padding:0 8px;min-height:36px;letter-spacing:.1px;}
+  .modlbl{font-size:7px;font-weight:800;letter-spacing:.6px;color:#7c7c92;
+    padding-right:2px;white-space:nowrap;}
+  #modbar .btn{flex:0 0 auto;font-size:9.5px;padding:0 7px;min-height:36px;letter-spacing:0;}
   #midiTab{border-color:#5a7cff;}
   #midiTab.on{background:linear-gradient(180deg,#7a9bff,#3f5cd6);border-color:#a8bcff;color:#08102b;
     box-shadow:0 0 16px -2px rgba(122,155,255,.55), inset 0 1px 0 rgba(255,255,255,.45);}
@@ -334,6 +334,26 @@
     border-radius:8px;touch-action:none;cursor:crosshair;}
   #autotargets{display:flex;gap:6px;}
   #autotargets .btn{padding:8px 10px;font-size:10px;}
+  #libtools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:10px;}
+  #libtools .btn{padding:0 12px;min-height:36px;font-size:11px;}
+  #liblist{display:flex;flex-direction:column;gap:5px;max-height:330px;overflow-y:auto;}
+  .librow{display:flex;gap:8px;align-items:center;padding:7px 11px;border-radius:9px;
+    background:linear-gradient(180deg,#20202a,#181820);border:1px solid var(--line-soft);}
+  .librow .btn{padding:0 10px;min-height:32px;font-size:10px;}
+  .libic{font-size:15px;}
+  .libnm{flex:1;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;}
+  .libsz{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;width:64px;
+    text-align:right;}
+  #libpads{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;}
+  .libpad{padding:8px 6px;border-radius:9px;cursor:pointer;text-align:center;
+    background:linear-gradient(180deg,#26262f,#1b1b23);border:1px solid var(--line);}
+  .libpad b{display:block;font-size:11px;color:var(--dim);}
+  .libpad span{display:block;font-size:8.5px;font-weight:700;margin-top:2px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .libpad.custom{border-color:var(--green);background:linear-gradient(180deg,#1d3a2c,#14261e);}
+  .libpad.custom span{color:var(--green);}
+  #libpadtools{display:flex;gap:10px;align-items:center;padding-top:10px;}
   #wtcv{display:block;width:100%;height:150px;background:var(--inset);border:1px solid var(--line);border-radius:8px;}
   .wtrow{display:flex;gap:24px;align-items:flex-end;padding:12px 4px 2px;flex-wrap:wrap;}
   #wtkeys{display:grid;grid-template-columns:repeat(24,1fr);gap:4px;padding:14px 0 4px;}
@@ -531,6 +551,7 @@
     <button class="btn" data-win="lab">&#128295; SONS</button>
     <button class="btn" data-win="wave">&#127754; SYNTH</button>
     <button class="btn" data-win="edit">&#9986; ÉDIT</button>
+    <button class="btn" data-win="lib">&#128193; BANQUE</button>
   </div>
   <div class="modgrp">
     <span class="modlbl">MIXER</span>
@@ -1105,6 +1126,36 @@
     Activez <b>MODE PLAYLIST</b> pour que le transport joue l'arrangement au lieu du pattern seul.</p>
   </div>
 </div>
+<div class="modwin" id="win-lib">
+  <div class="panel mwhead">
+    <span>&#128193; BANQUE DE SONS <small>vos fichiers rest&eacute;s en m&eacute;moire, r&eacute;utilisables dans tous vos projets</small></span>
+    <span style="flex:1"></span>
+    <button class="btn green" id="libImport">+ IMPORTER DES FICHIERS</button>
+    <input type="file" id="libFiles" accept="audio/*,.mid,.midi" multiple style="display:none">
+    <button class="btn" data-win="studio">&#8592; STUDIO</button>
+  </div>
+  <div class="panel" style="padding:14px 16px">
+    <div id="libtools">
+      <input type="text" id="libSearch" class="prsel" placeholder="rechercher un son&hellip;" style="width:220px">
+      <button class="btn on" id="libFAll">TOUT</button>
+      <button class="btn" id="libFAudio">AUDIO</button>
+      <button class="btn" id="libFMidi">MIDI</button>
+      <span style="flex:1"></span>
+      <span id="libInfo" class="labhint" style="padding:0"></span>
+    </div>
+    <div id="liblist"></div>
+    <p class="labhint">Touchez un fichier pour l'&eacute;couter &middot; <b>PAD</b> l'assigne au pad choisi &middot; <b>PISTE</b> en fait une piste du s&eacute;quenceur &middot; <b>SLICER</b> le charge dans le panneau SAMPLE.
+    Les fichiers MIDI import&eacute;s remplissent le piano roll du pattern courant.</p>
+  </div>
+  <div class="panel" style="padding:14px 16px 16px">
+    <div class="ptitle" style="padding:0 0 10px">PADS <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">chaque pad peut recevoir n'importe quel son de la banque</small></div>
+    <div id="libpads"></div>
+    <div id="libpadtools">
+      <button class="btn" id="padReset">&#8630; REVENIR AU KIT</button>
+      <span class="labhint" style="padding:0">les assignations sont enregistr&eacute;es avec le projet</span>
+    </div>
+  </div>
+</div>
 </div><!-- /stage -->
 
 <!-- ====== MENU ====== -->
@@ -1147,6 +1198,9 @@
 'use strict';
 /* stubs remplacés plus bas par le vrai système undo/autosave */
 var pushUndo=function(){}, scheduleAutosave=function(){};
+/* banque de sons : déclarées tôt car les pads les consultent au démarrage */
+var padOverride={};      /* index de pad → nom de fichier de la banque */
+var libBufs={};          /* nom de fichier → AudioBuffer décodé */
 /* =========================================================
    NEXUS BEAT LAB — étape 1
    Audio : Web Audio API (sons 100% synthétisés, aucun fichier)
@@ -1547,7 +1601,8 @@ function buildPads(){
   padgrid.innerHTML='';
   for(let i=0;i<16;i++){
     const isA = bank==='A';
-    const label = isA ? PADS[i][0] : 'SLICE '+(i+1);
+    const label = padOverride[i] ? padOverride[i].replace(/\.[^.]+$/,'').slice(0,11).toUpperCase()
+                : isA ? PADS[i][0] : 'SLICE '+(i+1);
     const col   = isA ? PADS[i][2] : SLICE_COLORS[i];
     const d=document.createElement('div'); d.className='pad';
     d.style.setProperty('--pc',col);
@@ -1555,7 +1610,14 @@ function buildPads(){
     d.innerHTML=`<span>${label}</span><span class="n">${i+1}</span>`;
     d.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
       const rate=Math.pow(2,padSemi/12); buzz(10);
-      if(isA){ playSound(PADS[i][1],AC.currentTime,master,rate); recordHit(PADS[i][1]); }
+      const ov=padOverride[i] && libBufs[padOverride[i]];
+      if(ov){                                   /* son personnalisé venant de la banque */
+        const s=AC.createBufferSource(); s.buffer=ov;
+        if(rate!==1) s.playbackRate.value=rate;
+        s.connect(master); s.start();
+        if(isA) recordHit(PADS[i][1]);
+      }
+      else if(isA){ playSound(PADS[i][1],AC.currentTime,master,rate); recordHit(PADS[i][1]); }
       else playSlice(i,0,rate);
       d.classList.add('hit'); setTimeout(()=>d.classList.remove('hit'),120); });
     padgrid.appendChild(d);
@@ -1967,6 +2029,7 @@ function switchWin(w){
     if(w==='lab') labSync();
     if(w==='audio'){ const s=document.getElementById('vxScale');
       if(s) s.textContent=NOTE_NAMES[scaleRoot]+' '+SCALES[scaleKey].label; }
+    if(w==='lib'){ libRefresh(); buildLibPads(); }
     if(w==='midi') midiRefresh();
     if(w==='perf') renderPerform();
     if(w==='pl') renderPl(); }
@@ -2573,7 +2636,7 @@ function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bass
   fx:{...fx}, swing, kitIdx, clips, plLen, plActive,
   scale:{root:scaleRoot,key:scaleKey,snap:scaleSnap},
   midiOut:{chan:midiChan, clock:clockOn, map:midiSendMap.map(m=>m?{on:m.on,note:m.note}:null)},
-  vx:{...vx}, hum:{...hum},
+  vx:{...vx}, hum:{...hum}, padOverride:{...padOverride},
   tracks:TRACKS.map(t=>({name:t.name,sound:t.sound,color:t.color,uid:t.uid||0})),
   inserts:inserts.map(l=>(l||[null,null]).map(x=>x?{id:x.id,params:{...x.params}}:null))}; }
 function applyProject(d){
@@ -2631,6 +2694,10 @@ function applyProject(d){
     while(inserts.length<TRACKS.length) inserts.push([null,null]);
     TRACKS.forEach((_,ti)=>rebuildInserts(ti));
     if(typeof buildInserts==='function'&&winIsOpen('lab')) buildInserts(); }
+  if(d.padOverride){ padOverride={...d.padOverride};
+    Object.keys(padOverride).forEach(k=>{ const n=padOverride[k];
+      if(!libBufs[n] && libAvail()) libBuf(n).catch(()=>{}); });
+    if(typeof buildPads==='function') buildPads(); }
   if(d.hum){ Object.assign(hum,d.hum);
     document.querySelectorAll('[data-hum]').forEach(x=>x.classList.toggle('on',+x.dataset.hum===hum.dose));
     [['humVel','vel'],['humTime','time'],['humGhost','ghost'],['humLive','live']].forEach(([id,k])=>{
@@ -4869,6 +4936,249 @@ document.getElementById('sampMode').addEventListener('click',function(){
 });
 makeKnob(document.getElementById('sampSensK'),document.getElementById('sampSensV'),
   0.5,v=>sampSens=v,v=>Math.round(v*100));
+
+/* ================== BANQUE DE SONS ==================
+   Les fichiers importés sont copiés dans l'application : ils restent disponibles
+   d'une session à l'autre, réutilisables dans tous les projets. */
+let libItems=[];              /* [{name, size, kind}] */
+let libFilter='all', libQuery='';
+const isMidiName=n=>/\.midi?$/i.test(n);
+function libAvail(){ return !!window.AndroidLib; }
+function b64ToBytes(b64){
+  const bin=atob(b64), u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+  return u;
+}
+async function libRefresh(){
+  const list=document.getElementById('liblist'); if(!list) return;
+  if(!libAvail()){
+    list.innerHTML='<p class="labhint">La banque persistante n\u2019est disponible que dans l\u2019application Android. '
+      +'Vous pouvez tout de m\u00eame importer des fichiers pour la session en cours.</p>';
+  }
+  try{ libItems=JSON.parse(AndroidLib.list()).map(f=>({...f,kind:isMidiName(f.name)?'midi':'audio'})); }
+  catch(e){ /* session sans pont : on garde les éléments en mémoire */ }
+  renderLib();
+}
+function renderLib(){
+  const list=document.getElementById('liblist'); if(!list) return;
+  const q=libQuery.toLowerCase();
+  const items=libItems.filter(f=>
+    (libFilter==='all'||f.kind===libFilter) && (!q||f.name.toLowerCase().includes(q)));
+  document.getElementById('libInfo').textContent=
+    libItems.length ? items.length+' / '+libItems.length+' fichier'+(libItems.length>1?'s':'') : '';
+  if(!items.length){
+    list.innerHTML='<p class="labhint">'+(libItems.length
+      ? 'Aucun fichier ne correspond \u00e0 cette recherche.'
+      : 'Banque vide \u2014 touchez <b>+ IMPORTER DES FICHIERS</b> pour ajouter vos sons et boucles.')+'</p>';
+    return;
+  }
+  list.innerHTML='';
+  items.forEach(f=>{
+    const row=document.createElement('div'); row.className='librow';
+    const ic=document.createElement('span'); ic.className='libic';
+    ic.textContent=f.kind==='midi'?'\ud83c\udfb9':'\ud83d\udd0a';
+    const nm=document.createElement('span'); nm.className='libnm'; nm.textContent=f.name;
+    const sz=document.createElement('span'); sz.className='libsz';
+    sz.textContent=(f.size/1024).toFixed(0)+' Ko';
+    row.append(ic,nm,sz);
+    if(f.kind==='audio'){
+      const play=mkBtn('\u25b6','',()=>libPlay(f.name));
+      const pad=mkBtn('PAD','',()=>libAssignPad(f.name));
+      const trk=mkBtn('PISTE','',()=>libToTrack(f.name));
+      const slc=mkBtn('SLICER','',()=>libToSlicer(f.name));
+      row.append(play,pad,trk,slc);
+    } else {
+      const imp=mkBtn('CHARGER','green',()=>libMidiImport(f.name));
+      row.append(imp);
+    }
+    const del=mkBtn('\u2715','red',()=>libDelete(f.name));
+    row.append(del);
+    list.appendChild(row);
+  });
+}
+function mkBtn(txt,cls,fn){
+  const b=document.createElement('button'); b.className='btn'+(cls?' '+cls:'');
+  b.textContent=txt; b.addEventListener('click',fn); return b;
+}
+async function libBuf(name){
+  if(libBufs[name]) return libBufs[name];
+  if(!libAvail()) return null;
+  const b64=AndroidLib.read(name); if(!b64) return null;
+  const bytes=b64ToBytes(b64);
+  const buf=await AC.decodeAudioData(bytes.buffer);
+  libBufs[name]=buf; return buf;
+}
+async function libPlay(name){
+  resume();
+  const b=await libBuf(name);
+  if(!b){ toast('Lecture impossible'); return; }
+  const s=AC.createBufferSource(); s.buffer=b; s.connect(master); s.start();
+}
+async function libAssignPad(name){
+  const n=prompt('Assigner "'+name+'" \u00e0 quel pad ? (1 \u00e0 16)','1');
+  if(!n) return;
+  const i=Math.max(1,Math.min(16,parseInt(n)||1))-1;
+  const b=await libBuf(name); if(!b){ toast('Fichier illisible'); return; }
+  padOverride[i]=name; buildPads(); buildLibPads(); scheduleAutosave();
+  toast('Pad '+(i+1)+' \u2192 '+name);
+}
+async function libToTrack(name){
+  const b=await libBuf(name); if(!b){ toast('Fichier illisible'); return; }
+  pushUndo(true);
+  if(addSampleTrack(name.replace(/\.[^.]+$/,''),b)){ rebuildTrackUI(); scheduleAutosave();
+    toast('Piste "'+name+'" ajout\u00e9e au s\u00e9quenceur'); }
+}
+async function libToSlicer(name){
+  const b=await libBuf(name); if(!b){ toast('Fichier illisible'); return; }
+  sampleBuf=b; sliceMarks=null;
+  document.getElementById('sampMode').textContent='TRANCHES \u00c9GALES';
+  document.getElementById('sampMode').classList.remove('on');
+  document.getElementById('sampName').textContent=name+' \u2014 '+b.duration.toFixed(2)+' s';
+  openFold('pSample'); drawWave(); buildSlices();
+  toast(name+' charg\u00e9 dans le slicer');
+}
+function libDelete(name){
+  if(!confirm('Supprimer "'+name+'" de la banque ?')) return;
+  try{ AndroidLib.remove(name); }catch(e){}
+  delete libBufs[name];
+  libItems=libItems.filter(f=>f.name!==name);
+  renderLib(); toast('Supprim\u00e9 de la banque');
+}
+/* ---------- import de fichiers ---------- */
+document.getElementById('libImport').addEventListener('click',()=>
+  document.getElementById('libFiles').click());
+document.getElementById('libFiles').addEventListener('change',async e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  resume();
+  const info=document.getElementById('libInfo');
+  let ok=0;
+  for(const f of files){
+    info.textContent='import de '+f.name+'\u2026';
+    try{
+      const bytes=new Uint8Array(await f.arrayBuffer());
+      if(libAvail()){
+        let bin=''; const CH=8192;
+        for(let i=0;i<bytes.length;i+=CH)
+          bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH));
+        const r=AndroidLib.save(f.name,btoa(bin));
+        if(r.indexOf('ok:')!==0) continue;
+      }
+      if(!isMidiName(f.name)){
+        libBufs[f.name]=await AC.decodeAudioData(bytes.buffer.slice(0));
+      } else {
+        libMidiRaw[f.name]=bytes;
+      }
+      if(!libItems.some(x=>x.name===f.name))
+        libItems.push({name:f.name,size:bytes.length,kind:isMidiName(f.name)?'midi':'audio'});
+      ok++;
+    }catch(err){}
+  }
+  info.textContent='';
+  libItems.sort((a,b)=>a.name.localeCompare(b.name));
+  renderLib();
+  toast(ok? ok+' fichier'+(ok>1?'s':'')+' ajout\u00e9'+(ok>1?'s':'')+' \u00e0 la banque'
+          : 'Aucun fichier lisible');
+  e.target.value='';
+});
+/* ---------- filtres et recherche ---------- */
+document.getElementById('libSearch').addEventListener('input',e=>{
+  libQuery=e.target.value; renderLib(); });
+[['libFAll','all'],['libFAudio','audio'],['libFMidi','midi']].forEach(([id,k])=>{
+  document.getElementById(id).addEventListener('click',()=>{
+    libFilter=k;
+    ['libFAll','libFAudio','libFMidi'].forEach(x=>
+      document.getElementById(x).classList.toggle('on',x===id));
+    renderLib(); });
+});
+/* ---------- import de fichiers MIDI vers le piano roll ---------- */
+const libMidiRaw={};
+function readVLQ(dv,pos){ let v=0,b;
+  do{ b=dv.getUint8(pos++); v=(v<<7)|(b&0x7F); }while(b&0x80);
+  return [v,pos]; }
+function parseMidi(bytes){
+  const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  if(dv.getUint32(0)!==0x4D546864) throw 'ce n\u2019est pas un fichier MIDI';
+  const ppq=dv.getUint16(12), ntrk=dv.getUint16(10);
+  let p=14; const notes=[];
+  for(let t=0;t<ntrk;t++){
+    if(p+8>dv.byteLength) break;
+    const len=dv.getUint32(p+4); let e=p+8+len; p+=8;
+    let tick=0, status=0;
+    const on={};
+    while(p<e && p<dv.byteLength){
+      let d; [d,p]=readVLQ(dv,p); tick+=d;
+      let b=dv.getUint8(p);
+      if(b&0x80){ status=b; p++; } 
+      const cmd=status&0xF0;
+      if(status===0xFF){ const ty=dv.getUint8(p++); let l; [l,p]=readVLQ(dv,p); p+=l; continue; }
+      if(status===0xF0||status===0xF7){ let l; [l,p]=readVLQ(dv,p); p+=l; continue; }
+      if(cmd===0xC0||cmd===0xD0){ p+=1; continue; }
+      const n=dv.getUint8(p++), v=dv.getUint8(p++);
+      if(cmd===0x90 && v>0){ (on[n]||(on[n]=[])).push({t:tick,v}); }
+      else if(cmd===0x80||(cmd===0x90&&v===0)){
+        const st=on[n]&&on[n].shift();
+        if(st) notes.push({p:n, start:st.t, dur:Math.max(1,tick-st.t), vel:st.v});
+      }
+    }
+    p=e;
+  }
+  return {ppq,notes};
+}
+function libMidiImport(name){
+  let bytes=libMidiRaw[name];
+  if(!bytes && libAvail()){ const b64=AndroidLib.read(name); if(b64) bytes=b64ToBytes(b64); }
+  if(!bytes){ toast('Fichier MIDI introuvable'); return; }
+  let m;
+  try{ m=parseMidi(bytes); }catch(err){ toast('MIDI illisible : '+err); return; }
+  if(!m.notes.length){ toast('Aucune note dans ce fichier'); return; }
+  pushUndo(true);
+  const len=patLens[curPat], line=bassLines[curPat];
+  for(let s=0;s<MAXSTEPS;s++) line[s]=null;
+  const stepTicks=m.ppq/4;                        /* un pas = une double-croche */
+  /* transposition automatique par octaves pour tenir dans les 3 octaves du piano roll */
+  const lo=Math.min(...m.notes.map(n=>n.p)), hi=Math.max(...m.notes.map(n=>n.p));
+  let shift=0;
+  while(lo-24-shift*12 > PR_ROWS-1) shift++;       /* trop aigu : on descend */
+  while(lo-24-shift*12 < 0) shift--;               /* trop grave : on monte */
+  const octShift=shift*12;
+  let placed=0, clipped=0;
+  m.notes.forEach(n=>{
+    const s=Math.round(n.start/stepTicks);
+    if(s<0||s>=len) return;
+    const raw=n.p-24-octShift;
+    if(raw<0||raw>PR_ROWS-1) clipped++;
+    const semi=Math.max(0,Math.min(PR_ROWS-1,raw));
+    const d=Math.max(1,Math.min(8,Math.round(n.dur/stepTicks)));
+    const v=n.vel>100?2:n.vel>60?1:0;
+    const cur=noteArr(line[s]);
+    if(!cur.some(x=>x.p===semi)){ cur.push({p:semi,d,v}); line[s]=cur; placed++; }
+  });
+  renderPiano(); scheduleAutosave();
+  const oct = octShift? ' (transpos\u00e9 de '+(octShift>0?'-':'+')+Math.abs(octShift/12)+' octave'
+    +(Math.abs(octShift)>12?'s':'')+')' : '';
+  toast(placed+' note'+(placed>1?'s':'')+' import\u00e9e'+(placed>1?'s':'')
+    +' dans P'+(curPat+1)+oct+(clipped?' \u2014 '+clipped+' hors plage':''));
+}
+/* ---------- assignation des pads ---------- */
+function buildLibPads(){
+  const box=document.getElementById('libpads'); if(!box) return;
+  box.innerHTML='';
+  for(let i=0;i<16;i++){
+    const d=document.createElement('div');
+    const over=padOverride[i];
+    d.className='libpad'+(over?' custom':'');
+    d.innerHTML='<b>'+(i+1)+'</b><span>'+(over||PADS[i][0])+'</span>';
+    d.addEventListener('click',()=>{
+      if(over){ delete padOverride[i]; buildPads(); buildLibPads(); scheduleAutosave();
+        toast('Pad '+(i+1)+' revenu au son du kit'); }
+      else toast('Choisissez un son dans la liste puis touchez PAD');
+    });
+    box.appendChild(d);
+  }
+}
+document.getElementById('padReset').addEventListener('click',()=>{
+  padOverride={}; buildPads(); buildLibPads(); scheduleAutosave();
+  toast('Tous les pads sont revenus au kit'); });
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);

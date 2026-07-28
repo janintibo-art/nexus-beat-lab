@@ -107,6 +107,73 @@ public class MainActivity extends Activity {
         public void disconnect() { closeMidi(); jsMidiStatus("deconnecte"); }
     }
 
+    /** Bibliothèque de samples : fichiers copiés dans l'app, conservés entre les sessions. */
+    class LibraryBridge {
+        private java.io.File dir() {
+            java.io.File d = new java.io.File(getFilesDir(), "library");
+            if (!d.exists()) d.mkdirs();
+            return d;
+        }
+
+        @JavascriptInterface
+        public String list() {
+            try {
+                java.io.File[] fs = dir().listFiles();
+                StringBuilder sb = new StringBuilder("[");
+                if (fs != null) {
+                    java.util.Arrays.sort(fs, new java.util.Comparator<java.io.File>() {
+                        public int compare(java.io.File a, java.io.File b) {
+                            return a.getName().compareToIgnoreCase(b.getName()); }
+                    });
+                    for (int i = 0; i < fs.length; i++) {
+                        if (i > 0) sb.append(",");
+                        sb.append("{\"name\":\"")
+                          .append(fs[i].getName().replace("\\", " ").replace("\"", " "))
+                          .append("\",\"size\":").append(fs[i].length()).append("}");
+                    }
+                }
+                return sb.append("]").toString();
+            } catch (Exception e) { return "[]"; }
+        }
+
+        /** Enregistre un fichier (base64) dans la bibliothèque. */
+        @JavascriptInterface
+        public String save(String name, String b64) {
+            try {
+                byte[] data = Base64.decode(b64, Base64.DEFAULT);
+                java.io.File f = new java.io.File(dir(), safe(name));
+                FileOutputStream fo = new FileOutputStream(f);
+                fo.write(data); fo.close();
+                return "ok:" + f.getName();
+            } catch (Exception e) { return "err:" + e.getMessage(); }
+        }
+
+        /** Relit un fichier de la bibliothèque en base64. */
+        @JavascriptInterface
+        public String read(String name) {
+            try {
+                java.io.File f = new java.io.File(dir(), safe(name));
+                if (!f.exists()) return "";
+                java.io.FileInputStream in = new java.io.FileInputStream(f);
+                byte[] buf = new byte[(int) f.length()];
+                int off = 0, r;
+                while (off < buf.length && (r = in.read(buf, off, buf.length - off)) > 0) off += r;
+                in.close();
+                return Base64.encodeToString(buf, Base64.NO_WRAP);
+            } catch (Exception e) { return ""; }
+        }
+
+        @JavascriptInterface
+        public boolean remove(String name) {
+            try { return new java.io.File(dir(), safe(name)).delete(); }
+            catch (Exception e) { return false; }
+        }
+
+        private String safe(String n) {
+            return n.replaceAll("[/\\\\:*?\"<>|]", "_");
+        }
+    }
+
     private void closeMidi() {
         try { if (midiOut != null) midiOut.close(); } catch (Exception e) {}
         try { if (midiIn != null) midiIn.close(); } catch (Exception e) {}
@@ -226,6 +293,8 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new ExportBridge(), "AndroidExport");
         // Pont MIDI natif (claviers et machines Korg en USB)
         webView.addJavascriptInterface(new MidiBridge(), "AndroidMidi");
+        // Bibliothèque de samples persistante
+        webView.addJavascriptInterface(new LibraryBridge(), "AndroidLib");
 
         // Sélecteur de fichiers pour charger des samples audio
         webView.setWebChromeClient(new WebChromeClient() {
