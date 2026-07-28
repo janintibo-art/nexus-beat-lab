@@ -230,12 +230,16 @@
     box-shadow:0 0 5px var(--fc,var(--orange));}
 
   /* ---------- modules / fenêtres ---------- */
-  #modbar{padding:6px 10px;display:flex;gap:6px;align-items:center;margin-bottom:var(--gap);
-    overflow-x:auto;scrollbar-width:none;position:sticky;top:62px;z-index:24;
-    backdrop-filter:blur(8px);}
-  #modbar::-webkit-scrollbar{display:none;}
-  #modbar .btn{flex:0 0 auto;font-size:11px;padding:0 12px;min-height:38px;letter-spacing:.4px;}
-  .mbhint{font-size:10px;color:var(--dim);flex:0 0 auto;padding-left:6px;}
+  #modbar{padding:5px 6px;display:flex;gap:5px;align-items:center;margin-bottom:var(--gap);
+    position:sticky;top:62px;z-index:24;backdrop-filter:blur(8px);}
+  .modgrp{display:flex;gap:3px;align-items:center;padding:3px 6px;border-radius:9px;
+    background:rgba(255,255,255,.04);border:1px solid var(--line-soft);}
+  .modlbl{font-size:7.5px;font-weight:800;letter-spacing:1px;color:#7c7c92;
+    padding-right:3px;white-space:nowrap;}
+  #modbar .btn{flex:0 0 auto;font-size:10px;padding:0 8px;min-height:36px;letter-spacing:.1px;}
+  #midiTab{border-color:#5a7cff;}
+  #midiTab.on{background:linear-gradient(180deg,#7a9bff,#3f5cd6);border-color:#a8bcff;color:#08102b;
+    box-shadow:0 0 16px -2px rgba(122,155,255,.55), inset 0 1px 0 rgba(255,255,255,.45);}
   #stage{position:relative;}
   .modwin{position:absolute;inset:0;z-index:30;display:none;flex-direction:column;gap:var(--gap);
     background:var(--bg);}
@@ -443,22 +447,32 @@
 </div>
 
 <div id="modbar" class="panel">
-  <button class="btn on" data-win="studio">&#127911; STUDIO</button>
-  <button class="btn" data-win="piano">&#127929; PIANO ROLL</button>
-  <button class="btn" data-win="eq">&#128202; EQUALIZER</button>
-  <button class="btn" data-win="lab">&#128295; SOUND LAB</button>
-  <button class="btn" data-win="audio">&#127908; AUDIO</button>
-  <button class="btn" data-win="master">&#127942; MASTER</button>
-  <button class="btn" data-win="auto">&#128200; AUTOMATION</button>
-  <button class="btn" data-win="wave">&#127754; WAVETABLE</button>
-  <button class="btn" data-win="edit">&#9986; EDITEUR</button>
-  <button class="btn" data-win="rack">&#127899; FX RACK</button>
-  <button class="btn" data-win="midi">&#127932; MIDI</button>
-  <button class="btn" data-win="perf">&#128293; PERFORM</button>
-  <button class="btn" data-win="pl">&#127916; PLAYLIST</button>
-  <button class="btn" data-win="export">&#128190; EXPORT</button>
-  <span style="flex:1"></span>
-  <span class="mbhint">naviguez entre les modules &mdash; la lecture continue en fond</span>
+  <div class="modgrp">
+    <span class="modlbl">CR&Eacute;ER</span>
+    <button class="btn on" data-win="studio">&#127911; STUDIO</button>
+    <button class="btn" data-win="piano">&#127929; PIANO</button>
+    <button class="btn" data-win="pl">&#127916; PLAYLIST</button>
+    <button class="btn" data-win="perf">&#128293; LIVE</button>
+  </div>
+  <div class="modgrp">
+    <span class="modlbl">SONS</span>
+    <button class="btn" data-win="lab">&#128295; SONS</button>
+    <button class="btn" data-win="wave">&#127754; SYNTH</button>
+    <button class="btn" data-win="edit">&#9986; ÉDIT</button>
+  </div>
+  <div class="modgrp">
+    <span class="modlbl">MIXER</span>
+    <button class="btn" data-win="rack">&#127899; FX</button>
+    <button class="btn" data-win="eq">&#128202; EQ</button>
+    <button class="btn" data-win="master">&#127942; MASTER</button>
+    <button class="btn" data-win="auto">&#128200; AUTO</button>
+  </div>
+  <div class="modgrp">
+    <span class="modlbl">MAT&Eacute;RIEL</span>
+    <button class="btn" data-win="midi" id="midiTab">&#127928; KORG</button>
+    <button class="btn" data-win="audio">&#127908; MICRO</button>
+    <button class="btn" data-win="export">&#128190; EXPORT</button>
+  </div>
 </div>
 
 <div id="stage">
@@ -935,6 +949,7 @@
   <button class="btn" id="mLoad">&#128194; Recharger la sauvegarde</button>
   <button class="btn" id="mDemo">&#127925; Pattern de d&eacute;mo</button>
   <button class="btn" id="mClear">&#10005; Tout effacer</button>
+  <button class="btn" id="mKorg">&#127928; Brancher un Korg / clavier MIDI</button>
   <button class="btn" id="mGuide">&#128214; Guide &amp; presets de style</button>
   <button class="btn" id="mNew">&#10024; Nouveau projet vierge</button>
   <button class="btn" id="mClose">&#8592; Fermer</button>
@@ -951,8 +966,9 @@
     <div class="welguide">
       <p><b>1.</b> Touchez les <b>PADS</b> pour jouer, changez de <b>KIT</b> avec &#9664;&#9654; (7 kits : 808, 909, hardtek, hardcore, DnB&hellip;)</p>
       <p><b>2.</b> Remplissez la grille du <b>SEQUENCEUR</b> ou enregistrez en live avec &#9679; REC &middot; 8 patterns, mode SONG pour les encha&icirc;ner</p>
-      <p><b>3.</b> Explorez les modules : <b>PIANO ROLL</b> (accords, arp&egrave;ges, 2 synth&eacute;s), <b>FX RACK</b>, <b>EQ</b>, <b>AUTOMATION</b>, <b>MASTER</b>, <b>MIDI</b> (Korg en USB), <b>PERFORM</b> pour le live</p>
-      <p><b>4.</b> <b>EXPORT</b> : votre morceau en WAV ou MIDI, direct dans T&eacute;l&eacute;chargements &middot; zoom &agrave; deux doigts partout</p>
+      <p><b>3.</b> La barre de modules est group&eacute;e par famille : <b>CR&Eacute;ER</b> (piano roll, playlist, live) &middot; <b>SONS</b> (sound lab, synth&eacute;, &eacute;diteur) &middot; <b>MIXER</b> (FX, EQ, master, automation) &middot; <b>MAT&Eacute;RIEL</b></p>
+      <p><b>4.</b> Pour brancher vos <b>Korg</b> : bouton <b>&#127928; KORG</b> (groupe MAT&Eacute;RIEL, &agrave; droite) &mdash; c&acirc;ble USB OTG, puis RAFRA&Icirc;CHIR et CONNECTER</p>
+      <p><b>5.</b> <b>EXPORT</b> : votre morceau en WAV, MIDI, stems ou projet complet &mdash; direct dans T&eacute;l&eacute;chargements</p>
     </div>
     <div class="ptitle" style="padding:10px 0 8px">D&Eacute;MARRER AVEC UN STYLE</div>
     <div id="welpresets"></div>
@@ -3337,6 +3353,8 @@ const welcomeEl=document.getElementById('welcome');
 function closeWelcome(){ welcomeEl.classList.remove('open');
   localStorage.setItem('nbl-seen','1'); }
 document.getElementById('welGo').addEventListener('click',closeWelcome);
+document.getElementById('mKorg').addEventListener('click',()=>{
+  openMenu(false); switchWin('midi'); });
 document.getElementById('mGuide').addEventListener('click',()=>{
   openMenu(false); welcomeEl.classList.add('open'); });
 document.getElementById('mNew').addEventListener('click',()=>{
