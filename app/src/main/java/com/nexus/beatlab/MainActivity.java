@@ -147,7 +147,9 @@ public class MainActivity extends Activity {
                     ContentValues cv = new ContentValues();
                     cv.put(MediaStore.Downloads.DISPLAY_NAME, expName);
                     cv.put(MediaStore.Downloads.MIME_TYPE,
-                            expName.endsWith(".wav") ? "audio/wav" : "application/json");
+                            expName.endsWith(".wav") ? "audio/wav"
+                          : expName.endsWith(".mid") ? "audio/midi"
+                          : "application/json");
                     Uri uri = getContentResolver()
                             .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
                     OutputStream os = getContentResolver().openOutputStream(uri);
