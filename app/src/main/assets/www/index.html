@@ -226,6 +226,10 @@
   .edsep{width:1px;height:26px;background:var(--line);margin:0 4px;}
   #edsrc{display:flex;gap:6px;}
   #edsrc .btn{padding:8px 11px;font-size:10px;}
+  .rackunit{padding:14px 16px;}
+  .rackhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  #satStyles,#tapeDivs{display:flex;gap:6px;}
+  #satStyles .btn,#tapeDivs .btn{padding:8px 11px;font-size:10px;}
 
   /* ---------- menu ---------- */
   #menuBtn{font-size:18px;padding:9px 15px;}
@@ -273,6 +277,7 @@
   <button class="btn" data-win="auto">&#128200; AUTOMATION</button>
   <button class="btn" data-win="wave">&#127754; WAVETABLE</button>
   <button class="btn" data-win="edit">&#9986; EDITEUR</button>
+  <button class="btn" data-win="rack">&#127899; FX RACK</button>
   <button class="btn" data-win="export">&#128190; EXPORT</button>
   <span style="flex:1"></span>
   <span class="mbhint">naviguez entre les modules &mdash; la lecture continue en fond</span>
@@ -563,6 +568,40 @@
     <p class="labhint">Les modifications du SAMPLE mettent &agrave; jour les 16 tranches et la banque B des pads. Les modifications d'une PISTE audio s'entendent d&egrave;s la prochaine lecture et dans l'export. Sans s&eacute;lection, le traitement s'applique &agrave; tout le fichier.</p>
   </div>
 </div>
+<div class="modwin" id="win-rack">
+  <div class="panel mwhead">
+    <span>&#127899; FX RACK <small>deux unit&eacute;s ins&eacute;r&eacute;es sur le bus master, avant l'EQ &mdash; incluses dans l'export</small></span>
+    <span style="flex:1"></span>
+    <button class="btn" data-win="studio">&#8592; STUDIO</button>
+  </div>
+  <div class="panel rackunit">
+    <div class="rackhead">
+      <button class="btn red" id="satOn">&#9889; SATURATOR</button>
+      <div id="satStyles"></div>
+    </div>
+    <div class="wtrow">
+      <div class="knob" style="--kc:var(--red)"><div class="kbody" id="satDrvK"></div><label>DRIVE</label><div class="kv" id="satDrvV">25</div></div>
+      <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="satTonK"></div><label>TONE</label><div class="kv" id="satTonV">70</div></div>
+      <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="satMixK"></div><label>MIX</label><div class="kv" id="satMixV">60</div></div>
+      <div class="knob" style="--kc:var(--green)"><div class="kbody" id="satOutK"></div><label>SORTIE</label><div class="kv" id="satOutV">0dB</div></div>
+    </div>
+    <p class="labhint">TAPE = chaleur douce &middot; TUBE = asym&eacute;trique, m&eacute;diums color&eacute;s &middot; FUZZ = &eacute;cr&ecirc;tage brutal. MIX en parall&egrave;le pour garder le punch (compression new-yorkaise).</p>
+  </div>
+  <div class="panel rackunit">
+    <div class="rackhead">
+      <button class="btn green" id="tapeOn">&#128337; TAPE DELAY</button>
+      <div id="tapeDivs"></div>
+      <button class="btn" id="tapePing">PING-PONG</button>
+    </div>
+    <div class="wtrow">
+      <div class="knob" style="--kc:var(--green)"><div class="kbody" id="tpFbK"></div><label>FEEDBACK</label><div class="kv" id="tpFbV">45</div></div>
+      <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="tpTonK"></div><label>TONE</label><div class="kv" id="tpTonV">55</div></div>
+      <div class="knob" style="--kc:var(--purple)"><div class="kbody" id="tpWowK"></div><label>WOW</label><div class="kv" id="tpWowV">20</div></div>
+      <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="tpMixK"></div><label>MIX</label><div class="kv" id="tpMixV">30</div></div>
+    </div>
+    <p class="labhint">D&eacute;lai &agrave; bande synchronis&eacute; au BPM, avec saturation douce dans la boucle et WOW (fluctuation de vitesse de la bande). En PING-PONG les r&eacute;p&eacute;titions alternent gauche/droite au casque.</p>
+  </div>
+</div>
 </div><!-- /stage -->
 
 <!-- ====== MENU ====== -->
@@ -604,7 +643,8 @@ master.connect(mixFilter); mixFilter.connect(shaper); shaper.connect(postFx);
 const eqLow=AC.createBiquadFilter(); eqLow.type='lowshelf'; eqLow.frequency.value=120;
 const eqMid=AC.createBiquadFilter(); eqMid.type='peaking'; eqMid.frequency.value=1000; eqMid.Q.value=1;
 const eqHigh=AC.createBiquadFilter(); eqHigh.type='highshelf'; eqHigh.frequency.value=6000;
-postFx.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
+/* postFx → FX RACK (saturator + tape delay, connectés plus bas) → eqLow */
+eqLow.connect(eqMid); eqMid.connect(eqHigh);
 /* ---------- chaîne de mastering : compresseur → imageur stéréo → limiteur ---------- */
 const mstIn=AC.createGain();               // entrée de la chaîne
 eqHigh.connect(mstIn);
@@ -1103,7 +1143,8 @@ function recordHit(soundName){
 /* ---------- BPM : glisser + TAP ---------- */
 const bpmVal=document.getElementById('bpmVal');
 function setBpm(v){ bpm=Math.min(220,Math.max(50,v)); bpmVal.textContent=bpm.toFixed(1);
-  delay.delayTime.value=60/bpm*0.75; }
+  delay.delayTime.value=60/bpm*0.75;
+  tapeU.set(tape,tapeTime()); }
 (function(){ let y0=0,b0=0;
   bpmVal.addEventListener('pointerdown',e=>{ y0=e.clientY;b0=bpm; bpmVal.setPointerCapture(e.pointerId); });
   bpmVal.addEventListener('pointermove',e=>{ if(e.buttons) setBpm(b0+(y0-e.clientY)*0.25); });
@@ -1362,7 +1403,10 @@ function buildOfflineChain(C){
   const lm=C.createDynamicsCompressor();
   lm.threshold.value=limiter.threshold.value; lm.ratio.value=limiter.ratio.value;
   lm.attack.value=0.001; lm.release.value=0.06; lm.knee.value=0;
-  m.connect(mf); mf.connect(sh); sh.connect(post); post.connect(eL);
+  m.connect(mf); mf.connect(sh); sh.connect(post);
+  const sO=makeSaturator(C); sO.set(sat);
+  const tO=makeTapeDelay(C); tO.set(tape,tapeTime());
+  post.connect(sO.input); sO.output.connect(tO.input); tO.output.connect(eL);
   eL.connect(eM); eM.connect(eH); eH.connect(cp); cp.connect(mk);
   mk.connect(lm); lm.connect(og); og.connect(C.destination);
   const dl=C.createDelay(2); dl.delayTime.value=60/bpm*0.75;
@@ -1465,7 +1509,7 @@ document.getElementById('expGo').addEventListener('click',async ()=>{
 /* ---------- projet : export / import JSON ---------- */
 function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bassPrm,
   sndParams:sndParams.map(p=>({...p})), autoData, autoOn, mst:{...mst},
-  wt:{...wt}, synthEngine}; }
+  wt:{...wt}, synthEngine, sat:{...sat}, tape:{...tape}}; }
 function applyProject(d){
   setBpm(d.bpm||128);
   if(d.patterns){ patterns=d.patterns.map(p=>pad32(p)); }
@@ -1484,6 +1528,14 @@ function applyProject(d){
   if(d.wt){ Object.assign(wt,d.wt); drawWT();
     document.getElementById('wtUniBtn').textContent='UNISON '+wt.uni; }
   if(d.synthEngine) setEngine(d.synthEngine);
+  if(d.sat) Object.assign(sat,d.sat);
+  if(d.tape) Object.assign(tape,d.tape);
+  if(d.sat||d.tape){ applyRack();
+    document.getElementById('satOn').classList.toggle('on',sat.on);
+    document.getElementById('tapeOn').classList.toggle('on',tape.on);
+    document.getElementById('tapePing').classList.toggle('on',tape.ping);
+    [...document.getElementById('satStyles').children].forEach((x,j)=>x.classList.toggle('on',j===sat.style));
+    [...document.getElementById('tapeDivs').children].forEach((x,j)=>x.classList.toggle('on',j===tape.div)); }
   chainPos=0; selectPattern(Math.min(d.curPat||0,NPAT-1)); renderChain();
 }
 document.getElementById('projSave').addEventListener('click',async ()=>{
@@ -2002,6 +2054,108 @@ document.getElementById('edUndo').addEventListener('click',()=>{
   if(edSrc.type==='sample'){ sampleBuf=b; drawWave(); buildSlices(); }
   else { audioTracks[edSrc.i].buf=b; buildAudioUI(); }
   edSel=null; drawEditor(); toast('Annul\u00e9'); });
+
+/* ================== FX RACK : saturator + tape delay ================== */
+const sat={on:false, drive:0.25, style:0, tone:0.7, mix:0.6, out:0.5};
+const tape={on:false, div:2, fb:0.45, tone:0.55, wow:0.2, mix:0.3, ping:true};
+const TAPE_DIVS=[{n:'1/8',m:0.5},{n:'1/8.',m:0.75},{n:'1/4',m:1},{n:'1/2',m:2}];
+function makeSaturator(C){
+  const inp=C.createGain(), out=C.createGain();
+  const dry=C.createGain(), wet=C.createGain();
+  const pre=C.createGain(), post=C.createGain();
+  const ws=C.createWaveShaper(); ws.oversample='4x';
+  const tone=C.createBiquadFilter(); tone.type='lowpass';
+  inp.connect(dry); dry.connect(out);
+  inp.connect(pre); pre.connect(ws); ws.connect(tone);
+  tone.connect(post); post.connect(wet); wet.connect(out);
+  return {input:inp, output:out,
+    set(s){
+      const d=1+s.drive*30, n=2048, c=new Float32Array(n);
+      for(let i=0;i<n;i++){ const x=i/(n-1)*2-1; let y;
+        if(s.style===0) y=Math.tanh(x*d)/Math.tanh(d);                                   // TAPE
+        else if(s.style===1) y=(x>=0?Math.tanh(x*d):Math.tanh(x*d*0.6))/Math.tanh(d);    // TUBE
+        else y=Math.max(-0.7,Math.min(0.7,x*d))/0.7;                                     // FUZZ
+        c[i]=y; }
+      ws.curve=c;
+      tone.frequency.value=600*Math.pow(30,s.tone);
+      post.gain.value=Math.pow(10,(s.out*12-6)/20)/Math.sqrt(1+s.drive*3);
+      wet.gain.value=s.on?s.mix:0;
+      dry.gain.value=s.on?1-s.mix*0.6:1;
+    }};
+}
+function makeTapeDelay(C){
+  const inp=C.createGain(), out=C.createGain();
+  const dry=C.createGain(); dry.gain.value=1; inp.connect(dry); dry.connect(out);
+  const dL=C.createDelay(3), dR=C.createDelay(3);
+  const tnL=C.createBiquadFilter(); tnL.type='lowpass';
+  const tnR=C.createBiquadFilter(); tnR.type='lowpass';
+  const stw=C.createWaveShaper();
+  (()=>{ const c=new Float32Array(256);
+    for(let i=0;i<256;i++){ const x=i/255*2-1; c[i]=Math.tanh(x*1.5)/Math.tanh(1.5); }
+    stw.curve=c; })();
+  const fbL=C.createGain(), fbR=C.createGain(), wet=C.createGain();
+  const hasPan=!!C.createStereoPanner;
+  const pL=hasPan?C.createStereoPanner():C.createGain();
+  const pR=hasPan?C.createStereoPanner():C.createGain();
+  inp.connect(dL);
+  dL.connect(tnL); tnL.connect(stw); stw.connect(fbL); fbL.connect(dR);   // L → R
+  dR.connect(tnR); tnR.connect(fbR); fbR.connect(dL);                     // R → L
+  tnL.connect(pL); tnR.connect(pR); pL.connect(wet); pR.connect(wet); wet.connect(out);
+  const lfo=C.createOscillator(); lfo.frequency.value=0.9;
+  const lfg=C.createGain(); lfg.gain.value=0;
+  lfo.connect(lfg); lfg.connect(dL.delayTime); lfg.connect(dR.delayTime);
+  lfo.start();
+  return {input:inp, output:out,
+    set(s,time){
+      dL.delayTime.value=time; dR.delayTime.value=time;
+      tnL.frequency.value=tnR.frequency.value=500*Math.pow(24,s.tone);
+      fbL.gain.value=fbR.gain.value=s.fb*0.72;
+      wet.gain.value=s.on?s.mix:0;
+      if(hasPan){ pL.pan.value=s.ping?-0.7:0; pR.pan.value=s.ping?0.7:0; }
+      lfg.gain.value=s.wow*0.0045;
+    }};
+}
+function tapeTime(){ return 60/bpm*TAPE_DIVS[tape.div].m; }
+const satU=makeSaturator(AC), tapeU=makeTapeDelay(AC);
+postFx.connect(satU.input); satU.output.connect(tapeU.input); tapeU.output.connect(eqLow);
+function applyRack(){ satU.set(sat); tapeU.set(tape,tapeTime()); }
+applyRack();
+/* ---------- interface du rack ---------- */
+document.getElementById('satOn').addEventListener('click',function(){ resume();
+  sat.on=!sat.on; this.classList.toggle('on',sat.on); applyRack(); });
+document.getElementById('tapeOn').addEventListener('click',function(){ resume();
+  tape.on=!tape.on; this.classList.toggle('on',tape.on); applyRack(); });
+document.getElementById('tapePing').addEventListener('click',function(){
+  tape.ping=!tape.ping; this.classList.toggle('on',tape.ping); applyRack(); });
+document.getElementById('tapePing').classList.toggle('on',tape.ping);
+['TAPE','TUBE','FUZZ'].forEach((n,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===0?' on':''); b.textContent=n;
+  b.addEventListener('click',()=>{ sat.style=i;
+    [...document.getElementById('satStyles').children].forEach((x,j)=>x.classList.toggle('on',j===i));
+    applyRack(); });
+  document.getElementById('satStyles').appendChild(b); });
+TAPE_DIVS.forEach((d,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===tape.div?' on':''); b.textContent=d.n;
+  b.addEventListener('click',()=>{ tape.div=i;
+    [...document.getElementById('tapeDivs').children].forEach((x,j)=>x.classList.toggle('on',j===i));
+    applyRack(); });
+  document.getElementById('tapeDivs').appendChild(b); });
+makeKnob(document.getElementById('satDrvK'),document.getElementById('satDrvV'),
+  0.25,v=>{sat.drive=v;applyRack();},v=>Math.round(v*100));
+makeKnob(document.getElementById('satTonK'),document.getElementById('satTonV'),
+  0.7,v=>{sat.tone=v;applyRack();},v=>Math.round(v*100));
+makeKnob(document.getElementById('satMixK'),document.getElementById('satMixV'),
+  0.6,v=>{sat.mix=v;applyRack();},v=>Math.round(v*100));
+makeKnob(document.getElementById('satOutK'),document.getElementById('satOutV'),
+  0.5,v=>{sat.out=v;applyRack();},v=>(v*12-6).toFixed(1)+'dB');
+makeKnob(document.getElementById('tpFbK'),document.getElementById('tpFbV'),
+  0.45,v=>{tape.fb=v;applyRack();},v=>Math.round(v*100));
+makeKnob(document.getElementById('tpTonK'),document.getElementById('tpTonV'),
+  0.55,v=>{tape.tone=v;applyRack();},v=>Math.round(v*100));
+makeKnob(document.getElementById('tpWowK'),document.getElementById('tpWowV'),
+  0.2,v=>{tape.wow=v;applyRack();},v=>Math.round(v*100));
+makeKnob(document.getElementById('tpMixK'),document.getElementById('tpMixV'),
+  0.3,v=>{tape.mix=v;applyRack();},v=>Math.round(v*100));
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
