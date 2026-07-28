@@ -205,6 +205,15 @@
     border-radius:8px;touch-action:none;cursor:crosshair;}
   #autotargets{display:flex;gap:6px;}
   #autotargets .btn{padding:8px 10px;font-size:10px;}
+  #wtcv{display:block;width:100%;height:150px;background:var(--inset);border:1px solid var(--line);border-radius:8px;}
+  .wtrow{display:flex;gap:24px;align-items:flex-end;padding:12px 4px 2px;flex-wrap:wrap;}
+  #wtkeys{display:grid;grid-template-columns:repeat(24,1fr);gap:4px;padding:14px 0 4px;}
+  .wtkey{height:56px;border-radius:6px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;
+    font-size:9px;font-weight:700;padding-bottom:5px;
+    background:linear-gradient(180deg,#e8e8ee,#c6c6d2);color:#333;
+    border-top:1px solid #fff;box-shadow:0 3px 6px rgba(0,0,0,.5);}
+  .wtkey.blk{background:linear-gradient(180deg,#33333d,#20202a);color:#889;}
+  .wtkey:active{filter:brightness(1.3);transform:translateY(1px);}
 
   /* ---------- menu ---------- */
   #menuBtn{font-size:18px;padding:9px 15px;}
@@ -250,6 +259,7 @@
   <button class="btn" data-win="audio">&#127908; AUDIO</button>
   <button class="btn" data-win="master">&#127942; MASTER</button>
   <button class="btn" data-win="auto">&#128200; AUTOMATION</button>
+  <button class="btn" data-win="wave">&#127754; WAVETABLE</button>
   <button class="btn" data-win="export">&#128190; EXPORT</button>
   <span style="flex:1"></span>
   <span class="mbhint">naviguez entre les modules &mdash; la lecture continue en fond</span>
@@ -474,6 +484,36 @@
   <div class="panel" style="padding:14px">
     <canvas id="autocv" width="1560" height="300"></canvas>
     <p class="labhint">Glissez le doigt sur la grille pour tracer. Chaque colonne correspond &agrave; un pas du pattern courant. Choisissez la cible en haut &agrave; droite : filtre du mix, volume, drive de la distorsion, mix du delay ou cutoff de la basse.</p>
+  </div>
+</div>
+<div class="modwin" id="win-wave">
+  <div class="panel mwhead">
+    <span>&#127754; NEXUS WAVE <small>synth&eacute; wavetable &mdash; morphing de 8 tables, unison, filtre + LFO</small></span>
+    <span style="flex:1"></span>
+    <button class="btn" id="wtUse">JOUER DANS LE PIANO ROLL</button>
+    <button class="btn" data-win="studio">&#8592; STUDIO</button>
+  </div>
+  <div class="panel" style="padding:14px">
+    <canvas id="wtcv" width="1560" height="150"></canvas>
+    <div class="wtrow">
+      <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="wtPosK"></div><label>WAVE</label><div class="kv" id="wtPosV">1</div></div>
+      <button class="btn" id="wtUniBtn">UNISON 3</button>
+      <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="wtDetK"></div><label>DETUNE</label><div class="kv" id="wtDetV">15</div></div>
+      <div class="knob" style="--kc:var(--purple)"><div class="kbody" id="wtSubK"></div><label>SUB</label><div class="kv" id="wtSubV">30</div></div>
+      <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="wtOctK"></div><label>OCTAVE</label><div class="kv" id="wtOctV">+1</div></div>
+      <div class="knob" style="--kc:var(--green)"><div class="kbody" id="wtVolK"></div><label>VOLUME</label><div class="kv" id="wtVolV">80</div></div>
+    </div>
+    <div class="wtrow">
+      <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="wtCutK"></div><label>CUTOFF</label><div class="kv" id="wtCutV">70</div></div>
+      <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="wtResK"></div><label>RESO</label><div class="kv" id="wtResV">20</div></div>
+      <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="wtEnvK"></div><label>ENV FILTRE</label><div class="kv" id="wtEnvV">40</div></div>
+      <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="wtAttK"></div><label>ATTACK</label><div class="kv" id="wtAttV">5</div></div>
+      <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="wtDecK"></div><label>DECAY</label><div class="kv" id="wtDecV">50</div></div>
+      <div class="knob" style="--kc:var(--purple)"><div class="kbody" id="wtLfrK"></div><label>LFO VITESSE</label><div class="kv" id="wtLfrV">2.0Hz</div></div>
+      <div class="knob" style="--kc:var(--purple)"><div class="kbody" id="wtLfaK"></div><label>LFO &rarr; FILTRE</label><div class="kv" id="wtLfaV">0</div></div>
+    </div>
+    <div id="wtkeys"></div>
+    <p class="labhint">Tournez WAVE pour morpher entre les 8 tables (sinus &rarr; saw &rarr; carr&eacute; &rarr; m&eacute;tallique&hellip;), UNISON + DETUNE pour &eacute;paissir, ENV FILTRE pour le mordant. Testez au clavier ci-dessus, puis <b>JOUER DANS LE PIANO ROLL</b> pour composer avec.</p>
   </div>
 </div>
 </div><!-- /stage -->
@@ -943,7 +983,7 @@ function scheduler(){
       AUTO_TARGETS.forEach((tg,ti)=>{ const v=ad[ti][step]; if(v!==null) tg.apply(v); }); }
     TRACKS.forEach((trk,ti)=>{ if(pattern[ti][step] && !trackMute[ti]) playTrack(ti,t); });
     const bn=bassLines[curPat][step];
-    if(bn!==null && bn!==undefined) playBassNote(bn,t);
+    if(bn!==null && bn!==undefined) playSynth(bn,t);
     highlight(step);
     step=(step+1)%len; nextTime+=stepDur();
     if(step===0 && mode==='song' && chain.length>1){
@@ -1116,7 +1156,7 @@ function renderPiano(){
       if(line[c]===semi) cell.classList.add('on');
       cell.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
         if(line[c]===semi) line[c]=null;
-        else { line[c]=semi; playBassNote(semi,AC.currentTime); }
+        else { line[c]=semi; playSynth(semi,AC.currentTime); }
         renderPiano(); });
       prgrid.appendChild(cell);
     }
@@ -1276,7 +1316,7 @@ function scheduleOffline(nodes, seq, loops){
         const vd=ad[3][s]; if(vd!==null&&fx.dly) nodes.delayWet.gain.setValueAtTime(vd*0.9,t);
         const vb=ad[4][s]; if(vb!==null) bassPrm.cutoff=vb; }
       TRACKS.forEach((trk,ti)=>{ if(pat[ti][s]&&!trackMute[ti]) playTrack(ti,tt,nodes.trackOuts[ti]); });
-      const bn=line[s]; if(bn!==null&&bn!==undefined) playBassNote(bn,tt,nodes.bassOut);
+      const bn=line[s]; if(bn!==null&&bn!==undefined) playSynth(bn,tt,nodes.bassOut);
       t+=sd;
     }
   }
@@ -1336,7 +1376,8 @@ document.getElementById('expGo').addEventListener('click',async ()=>{
 
 /* ---------- projet : export / import JSON ---------- */
 function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bassPrm,
-  sndParams:sndParams.map(p=>({...p})), autoData, autoOn, mst:{...mst}}; }
+  sndParams:sndParams.map(p=>({...p})), autoData, autoOn, mst:{...mst},
+  wt:{...wt}, synthEngine}; }
 function applyProject(d){
   setBpm(d.bpm||128);
   if(d.patterns){ patterns=d.patterns.map(p=>pad32(p)); }
@@ -1352,6 +1393,9 @@ function applyProject(d){
   if(d.mst){ Object.assign(mst,d.mst); applyMst();
     document.getElementById('mstComp').classList.toggle('on',mst.comp);
     document.getElementById('mstLim').classList.toggle('on',mst.lim); }
+  if(d.wt){ Object.assign(wt,d.wt); drawWT();
+    document.getElementById('wtUniBtn').textContent='UNISON '+wt.uni; }
+  if(d.synthEngine) setEngine(d.synthEngine);
   chainPos=0; selectPattern(Math.min(d.curPat||0,NPAT-1)); renderChain();
 }
 document.getElementById('projSave').addEventListener('click',async ()=>{
@@ -1595,6 +1639,150 @@ function autoPaint(e){
 autocv.addEventListener('pointerdown',e=>{ e.preventDefault();
   autocv.setPointerCapture(e.pointerId); autoPaint(e); });
 autocv.addEventListener('pointermove',e=>{ if(e.buttons) autoPaint(e); });
+
+/* ================== NEXUS WAVE : synthé wavetable ================== */
+const WT_N=8, WT_H=32;
+/* 8 tables définies par leurs harmoniques (32 partiels) */
+const WT_FRAMES=(()=>{
+  const F=[];
+  const mk=fn=>{ const a=new Float32Array(WT_H+1);
+    for(let h=1;h<=WT_H;h++) a[h]=fn(h); return a; };
+  F.push(mk(h=>h===1?1:0));                                        // 1 sinus
+  F.push(mk(h=>h%2===1?Math.pow(-1,(h-1)/2)/(h*h):0));             // 2 triangle
+  F.push(mk(h=>h<=8?1/h:0));                                       // 3 saw douce
+  F.push(mk(h=>1/h));                                              // 4 saw pleine
+  F.push(mk(h=>h%2===1?1/h:0));                                    // 5 carré
+  F.push(mk(h=>1/h*(0.6+0.4*Math.cos(h*0.9))));                    // 6 PWM
+  F.push(mk(h=>[1,2,3,5,7,11,13].includes(h)?1/Math.sqrt(h):0));   // 7 métallique
+  F.push(mk(h=>h>=6?1/Math.sqrt(h):h===1?0.35:0));                 // 8 buzz
+  return F;
+})();
+const wtWaveCache=new Map();   // PeriodicWave par contexte audio
+function wtWavesFor(C){
+  if(!wtWaveCache.has(C)){
+    const real=new Float32Array(WT_H+1);
+    wtWaveCache.set(C, WT_FRAMES.map(im=>C.createPeriodicWave(real,im,{disableNormalization:false})));
+  }
+  return wtWaveCache.get(C);
+}
+const wt={pos:0, uni:3, det:0.15, sub:0.3, oct:1, vol:0.8,
+          cutoff:0.7, res:0.2, envAmt:0.4, att:0.005, dec:0.5,
+          lfoRate:0.3, lfoAmt:0};
+let synthEngine='bass';                     // moteur du piano roll : 'bass' ou 'wave'
+const waveGain=AC.createGain(); waveGain.gain.value=0.8; waveGain.connect(master);
+function playWaveNote(semi,t,out){
+  out = out || waveGain;
+  const C=out.context, waves=wtWavesFor(C);
+  const f0=32.70*Math.pow(2,(semi+wt.oct*12)/12);
+  const fpos=wt.pos*(WT_N-1), i0=Math.floor(fpos), frac=fpos-i0;
+  const i1=Math.min(WT_N-1,i0+1);
+  const dur=0.05+wt.dec*1.2, att=0.002+wt.att*0.25;
+  /* filtre + enveloppe + LFO */
+  const flt=C.createBiquadFilter(); flt.type='lowpass';
+  const base=120*Math.pow(120,wt.cutoff);
+  const pk=Math.min(16000, base*(1+wt.envAmt*8));
+  flt.frequency.setValueAtTime(pk,t);
+  flt.frequency.exponentialRampToValueAtTime(Math.max(90,base*0.5),t+dur*0.8);
+  flt.Q.value=wt.res*16;
+  if(wt.lfoAmt>0){ const lfo=C.createOscillator(); lfo.frequency.value=0.3+wt.lfoRate*11;
+    const lg=C.createGain(); lg.gain.value=wt.lfoAmt*base*2;
+    lfo.connect(lg); lg.connect(flt.frequency); lfo.start(t); lfo.stop(t+dur+0.1); }
+  const amp=C.createGain();
+  amp.gain.setValueAtTime(0,t); amp.gain.linearRampToValueAtTime(0.9,t+att);
+  amp.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  flt.connect(amp); amp.connect(out);
+  /* voix unison : chaque voix = 2 oscillateurs (morphing entre 2 tables) */
+  const nv=wt.uni, cents=wt.det*35;
+  for(let v=0;v<nv;v++){
+    const d = nv===1 ? 0 : (v/(nv-1)*2-1)*cents;
+    const vg=C.createGain(); vg.gain.value=1/Math.sqrt(nv); vg.connect(flt);
+    const o0=C.createOscillator(); o0.setPeriodicWave(waves[i0]);
+    o0.frequency.value=f0; o0.detune.value=d;
+    const g0=C.createGain(); g0.gain.value=1-frac; o0.connect(g0); g0.connect(vg);
+    o0.start(t); o0.stop(t+dur+0.05);
+    if(frac>0.01){ const o1=C.createOscillator(); o1.setPeriodicWave(waves[i1]);
+      o1.frequency.value=f0; o1.detune.value=d;
+      const g1=C.createGain(); g1.gain.value=frac; o1.connect(g1); g1.connect(vg);
+      o1.start(t); o1.stop(t+dur+0.05); }
+  }
+  if(wt.sub>0.02){ const so=C.createOscillator(); so.type='sine'; so.frequency.value=f0/2;
+    const sg=C.createGain(); sg.gain.value=wt.sub*0.8; so.connect(sg); sg.connect(flt);
+    so.start(t); so.stop(t+dur+0.05); }
+}
+/* routeur : le piano roll joue le moteur choisi */
+function playSynth(semi,t,out){
+  if(synthEngine==='wave') playWaveNote(semi,t,out===bassGain?undefined:out);
+  else playBassNote(semi,t,out);
+}
+/* ---------- affichage de la forme d'onde ---------- */
+function drawWT(){
+  const cv=document.getElementById('wtcv'), ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#0a0a0d'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(255,255,255,.12)';
+  ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+  const fpos=wt.pos*(WT_N-1), i0=Math.floor(fpos), frac=fpos-i0;
+  const i1=Math.min(WT_N-1,i0+1), a0=WT_FRAMES[i0], a1=WT_FRAMES[i1];
+  ctx.strokeStyle='#2ee6ff'; ctx.lineWidth=3; ctx.beginPath();
+  let peak=0.001; const pts=[];
+  for(let x=0;x<W;x+=2){ const ph=x/W*2*Math.PI; let y=0;
+    for(let h=1;h<=WT_H;h++){ const amp=a0[h]*(1-frac)+a1[h]*frac;
+      if(amp) y+=amp*Math.sin(h*ph); }
+    pts.push(y); if(Math.abs(y)>peak) peak=Math.abs(y); }
+  pts.forEach((y,i)=>{ const px=i*2, py=H/2-y/peak*(H/2-12);
+    i?ctx.lineTo(px,py):ctx.moveTo(px,py); });
+  ctx.stroke(); ctx.lineWidth=1;
+}
+/* ---------- interface ---------- */
+makeKnob(document.getElementById('wtPosK'),document.getElementById('wtPosV'),
+  0,v=>{wt.pos=v;drawWT();},v=>(1+v*(WT_N-1)).toFixed(1));
+const uniBtn=document.getElementById('wtUniBtn');
+uniBtn.addEventListener('click',()=>{ wt.uni = wt.uni===1?3:wt.uni===3?5:wt.uni===5?7:1;
+  uniBtn.textContent='UNISON '+wt.uni; });
+makeKnob(document.getElementById('wtDetK'),document.getElementById('wtDetV'),
+  0.15,v=>wt.det=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('wtSubK'),document.getElementById('wtSubV'),
+  0.3,v=>wt.sub=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('wtOctK'),document.getElementById('wtOctV'),
+  0.5,v=>wt.oct=Math.round(v*4-1),v=>{const o=Math.round(v*4-1);return (o>0?'+':'')+o;});
+makeKnob(document.getElementById('wtVolK'),document.getElementById('wtVolV'),
+  0.8,v=>waveGain.gain.value=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('wtCutK'),document.getElementById('wtCutV'),
+  0.7,v=>wt.cutoff=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('wtResK'),document.getElementById('wtResV'),
+  0.2,v=>wt.res=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('wtEnvK'),document.getElementById('wtEnvV'),
+  0.4,v=>wt.envAmt=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('wtAttK'),document.getElementById('wtAttV'),
+  0.02,v=>wt.att=v,v=>Math.round(v*250)+'ms');
+makeKnob(document.getElementById('wtDecK'),document.getElementById('wtDecV'),
+  0.5,v=>wt.dec=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('wtLfrK'),document.getElementById('wtLfrV'),
+  0.15,v=>wt.lfoRate=v,v=>(0.3+v*11).toFixed(1)+'Hz');
+makeKnob(document.getElementById('wtLfaK'),document.getElementById('wtLfaV'),
+  0,v=>wt.lfoAmt=v,v=>Math.round(v*100));
+/* clavier d'essai : 2 octaves */
+const wtkeys=document.getElementById('wtkeys');
+for(let i=0;i<24;i++){
+  const nm=NOTE_NAMES[i%12], k=document.createElement('div');
+  k.className='wtkey'+(nm.includes('#')?' blk':'');
+  k.textContent=nm+(2+Math.floor(i/12));
+  k.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
+    playWaveNote(i+12,AC.currentTime); });
+  wtkeys.appendChild(k);
+}
+/* utiliser NEXUS WAVE dans le piano roll */
+const wtUseBtn=document.getElementById('wtUse');
+function setEngine(en){
+  synthEngine=en;
+  wtUseBtn.classList.toggle('on',en==='wave');
+  wtUseBtn.textContent = en==='wave' ? '\u2713 ACTIF DANS LE PIANO ROLL' : 'JOUER DANS LE PIANO ROLL';
+}
+wtUseBtn.addEventListener('click',()=>{ resume();
+  setEngine(synthEngine==='wave'?'bass':'wave');
+  toast(synthEngine==='wave' ? 'Le piano roll joue NEXUS WAVE'
+                             : 'Le piano roll joue le synth\u00e9 BASS'); });
+drawWT();
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
