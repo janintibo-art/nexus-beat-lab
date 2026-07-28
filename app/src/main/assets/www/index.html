@@ -230,6 +230,15 @@
   .rackhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
   #satStyles,#tapeDivs{display:flex;gap:6px;}
   #satStyles .btn,#tapeDivs .btn{padding:8px 11px;font-size:10px;}
+  #midiLed{width:12px;height:12px;border-radius:50%;background:#26262e;border:1px solid var(--line);display:inline-block;}
+  #midiLed.onled{background:var(--green);box-shadow:0 0 10px var(--green);}
+  #midiState{font-size:11px;font-weight:800;letter-spacing:1px;color:var(--red);}
+  .mididev{display:flex;align-items:center;gap:14px;padding:10px 14px;margin-bottom:8px;border-radius:10px;
+    background:linear-gradient(180deg,#20202a,#181820);border:1px solid var(--line);font-size:13px;font-weight:700;}
+  .mididev span{flex:1;}
+  #midiTargets{display:flex;gap:8px;padding-bottom:10px;}
+  #midiMon{font-size:12px;color:var(--dim);padding:4px 0;}
+  #midiMon span{color:var(--cyan);font-weight:800;}
 
   /* ---------- menu ---------- */
   #menuBtn{font-size:18px;padding:9px 15px;}
@@ -278,6 +287,7 @@
   <button class="btn" data-win="wave">&#127754; WAVETABLE</button>
   <button class="btn" data-win="edit">&#9986; EDITEUR</button>
   <button class="btn" data-win="rack">&#127899; FX RACK</button>
+  <button class="btn" data-win="midi">&#127932; MIDI</button>
   <button class="btn" data-win="export">&#128190; EXPORT</button>
   <span style="flex:1"></span>
   <span class="mbhint">naviguez entre les modules &mdash; la lecture continue en fond</span>
@@ -600,6 +610,52 @@
       <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="tpMixK"></div><label>MIX</label><div class="kv" id="tpMixV">30</div></div>
     </div>
     <p class="labhint">D&eacute;lai &agrave; bande synchronis&eacute; au BPM, avec saturation douce dans la boucle et WOW (fluctuation de vitesse de la bande). En PING-PONG les r&eacute;p&eacute;titions alternent gauche/droite au casque.</p>
+  </div>
+  <div class="panel rackunit">
+    <div class="rackhead">
+      <button class="btn" id="modOn">&#127744; MOD FX</button>
+      <div id="modModes"></div>
+    </div>
+    <div class="wtrow">
+      <div class="knob" style="--kc:var(--purple)"><div class="kbody" id="mdRateK"></div><label>VITESSE</label><div class="kv" id="mdRateV">1.9Hz</div></div>
+      <div class="knob" style="--kc:var(--purple)"><div class="kbody" id="mdDepK"></div><label>PROFONDEUR</label><div class="kv" id="mdDepV">50</div></div>
+      <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="mdFbK"></div><label>FEEDBACK</label><div class="kv" id="mdFbV">40</div></div>
+      <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="mdMixK"></div><label>MIX</label><div class="kv" id="mdMixV">50</div></div>
+    </div>
+    <p class="labhint">CHORUS = &eacute;paissit et &eacute;largit &middot; FLANGER = balayage m&eacute;tallique (montez le feedback) &middot; PHASER = tourbillon psych&eacute;d&eacute;lique. Superbe sur les stabs du wavetable et les hats.</p>
+  </div>
+  <div class="panel rackunit">
+    <div class="rackhead">
+      <button class="btn red" id="pumpOn">&#128147; PUMP</button>
+      <div id="pumpRates"></div>
+    </div>
+    <div class="wtrow">
+      <div class="knob" style="--kc:var(--red)"><div class="kbody" id="ppDepK"></div><label>PROFONDEUR</label><div class="kv" id="ppDepV">70</div></div>
+      <div class="knob" style="--kc:var(--orange)"><div class="kbody" id="ppRelK"></div><label>REMONT&Eacute;E</label><div class="kv" id="ppRelV">230ms</div></div>
+    </div>
+    <p class="labhint">Compression sidechain : tout le mix plonge &agrave; chaque temps puis remonte &mdash; le pompage house/techno. En 1/4 sur un pad tenu du wavetable, c'est imparable. La remont&eacute;e r&egrave;gle la vitesse du retour.</p>
+  </div>
+</div>
+<div class="modwin" id="win-midi">
+  <div class="panel mwhead">
+    <span>&#127932; MIDI <small>branchez votre Korg ou clavier en USB (adaptateur OTG) &mdash; moteur FabKorg embarqu&eacute;</small></span>
+    <span style="flex:1"></span>
+    <span id="midiLed"></span>
+    <span id="midiState">D&Eacute;CONNECT&Eacute;</span>
+    <button class="btn" id="midiRefresh">&#8635; RAFRA&Icirc;CHIR</button>
+    <button class="btn" data-win="studio">&#8592; STUDIO</button>
+  </div>
+  <div class="panel" style="padding:16px">
+    <div class="ptitle" style="padding:0 0 8px">APPAREILS D&Eacute;TECT&Eacute;S</div>
+    <div id="midiList"></div>
+  </div>
+  <div class="panel" style="padding:16px">
+    <div class="ptitle" style="padding:0 0 8px">ROUTAGE DES NOTES</div>
+    <div id="midiTargets"></div>
+    <div id="midiMon">derni&egrave;re activit&eacute; : <span id="midiLast">&mdash;</span></div>
+    <p class="labhint"><b>PADS</b> : les notes jouent les 16 pads (note 36 = pad 1, mapping batterie) avec la v&eacute;locit&eacute;, et s'enregistrent dans la grille si &#9679; REC est actif.
+    <b>BASS</b> / <b>WAVE</b> : le clavier joue le synth&eacute; choisi (note 24 = C1), et les notes s'&eacute;crivent dans le piano roll pendant l'enregistrement.
+    CC74 pilote le cutoff des synth&eacute;s, CC1 (molette) le filtre du mix.</p>
   </div>
 </div>
 </div><!-- /stage -->
@@ -1066,6 +1122,7 @@ function scheduler(){
     const t = nextTime + sw;
     const len=patLens[curPat];
     if(step>=len) step=0;
+    if(pump.on && step%PUMP_RATES[pump.rate].steps===0) pumpU.duck(t,pump);
     if(autoOn){ const ad=autoData[curPat];
       AUTO_TARGETS.forEach((tg,ti)=>{ const v=ad[ti][step]; if(v!==null) tg.apply(v); }); }
     TRACKS.forEach((trk,ti)=>{ if(pattern[ti][step] && !trackMute[ti]) playTrack(ti,t); });
@@ -1098,6 +1155,7 @@ function play(){ resume(); if(playing) return; playing=true; step=0; nextTime=AC
 function stop(){ playing=false; clearInterval(timer);
   playBtn.classList.remove('on'); renderChain();
   stopAudioPlayback();
+  pumpU.reset();
   if(audioRecording){ stopAudioRec(); recBtn.classList.remove('on'); }
   document.querySelectorAll('.playcol').forEach(e=>e.classList.remove('playcol')); }
 function resume(){ if(AC.state==='suspended') AC.resume(); }
@@ -1215,7 +1273,8 @@ function switchWin(w){
     if(w==='piano') renderPiano();
     if(w==='eq') drawEq();
     if(w==='auto') drawAuto();
-    if(w==='edit') drawEditor(); }
+    if(w==='edit') drawEditor();
+    if(w==='midi') midiRefresh(); }
   window.scrollTo(0,0);
 }
 document.querySelectorAll('[data-win]').forEach(b=>
@@ -1405,8 +1464,11 @@ function buildOfflineChain(C){
   lm.attack.value=0.001; lm.release.value=0.06; lm.knee.value=0;
   m.connect(mf); mf.connect(sh); sh.connect(post);
   const sO=makeSaturator(C); sO.set(sat);
+  const mO=makeModFX(C); mO.set(mod);
   const tO=makeTapeDelay(C); tO.set(tape,tapeTime());
-  post.connect(sO.input); sO.output.connect(tO.input); tO.output.connect(eL);
+  const pO=makePump(C);
+  post.connect(sO.input); sO.output.connect(mO.input);
+  mO.output.connect(tO.input); tO.output.connect(pO.node); pO.node.connect(eL);
   eL.connect(eM); eM.connect(eH); eH.connect(cp); cp.connect(mk);
   mk.connect(lm); lm.connect(og); og.connect(C.destination);
   const dl=C.createDelay(2); dl.delayTime.value=60/bpm*0.75;
@@ -1427,7 +1489,7 @@ function buildOfflineChain(C){
   const bassOut=C.createGain(); bassOut.gain.value=bassGain.gain.value; bassOut.connect(m);
   // pistes audio enregistrées (bouclées sur toute la durée du rendu)
   const audioOut=C.createGain(); audioOut.gain.value=1; audioOut.connect(m);
-  return {trackOuts, bassOut, audioOut, ctx:C, mixFilter:mf, outGain:og, delayWet:dw};
+  return {trackOuts, bassOut, audioOut, ctx:C, mixFilter:mf, outGain:og, delayWet:dw, pump:pO};
 }
 function scheduleOffline(nodes, seq, loops){
   const sd=stepDur(); const t0=0.05; let t=t0;
@@ -1441,6 +1503,7 @@ function scheduleOffline(nodes, seq, loops){
     const len=patLens[p], pat=patterns[p], line=bassLines[p];
     for(let s=0;s<len;s++){
       const tt=t+((s%2===1)?sd*swing*0.5:0);
+      if(pump.on && s%PUMP_RATES[pump.rate].steps===0) nodes.pump.duck(t,pump);
       if(autoOn){ const ad=autoData[p];
         const vf=ad[0][s]; if(vf!==null) nodes.mixFilter.frequency.setValueAtTime(120*Math.pow(160,vf),t);
         const vv=ad[1][s]; if(vv!==null) nodes.outGain.gain.setValueAtTime(vv*outGain.gain.value,t);
@@ -1509,7 +1572,7 @@ document.getElementById('expGo').addEventListener('click',async ()=>{
 /* ---------- projet : export / import JSON ---------- */
 function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bassPrm,
   sndParams:sndParams.map(p=>({...p})), autoData, autoOn, mst:{...mst},
-  wt:{...wt}, synthEngine, sat:{...sat}, tape:{...tape}}; }
+  wt:{...wt}, synthEngine, sat:{...sat}, tape:{...tape}, mod:{...mod}, pump:{...pump}}; }
 function applyProject(d){
   setBpm(d.bpm||128);
   if(d.patterns){ patterns=d.patterns.map(p=>pad32(p)); }
@@ -1530,12 +1593,18 @@ function applyProject(d){
   if(d.synthEngine) setEngine(d.synthEngine);
   if(d.sat) Object.assign(sat,d.sat);
   if(d.tape) Object.assign(tape,d.tape);
-  if(d.sat||d.tape){ applyRack();
+  if(d.mod) Object.assign(mod,d.mod);
+  if(d.pump) Object.assign(pump,d.pump);
+  if(d.sat||d.tape||d.mod||d.pump){ applyRack();
     document.getElementById('satOn').classList.toggle('on',sat.on);
     document.getElementById('tapeOn').classList.toggle('on',tape.on);
     document.getElementById('tapePing').classList.toggle('on',tape.ping);
+    document.getElementById('modOn').classList.toggle('on',mod.on);
+    document.getElementById('pumpOn').classList.toggle('on',pump.on);
     [...document.getElementById('satStyles').children].forEach((x,j)=>x.classList.toggle('on',j===sat.style));
-    [...document.getElementById('tapeDivs').children].forEach((x,j)=>x.classList.toggle('on',j===tape.div)); }
+    [...document.getElementById('tapeDivs').children].forEach((x,j)=>x.classList.toggle('on',j===tape.div));
+    [...document.getElementById('modModes').children].forEach((x,j)=>x.classList.toggle('on',j===mod.mode));
+    [...document.getElementById('pumpRates').children].forEach((x,j)=>x.classList.toggle('on',j===pump.rate)); }
   chainPos=0; selectPattern(Math.min(d.curPat||0,NPAT-1)); renderChain();
 }
 document.getElementById('projSave').addEventListener('click',async ()=>{
@@ -2116,9 +2185,59 @@ function makeTapeDelay(C){
     }};
 }
 function tapeTime(){ return 60/bpm*TAPE_DIVS[tape.div].m; }
-const satU=makeSaturator(AC), tapeU=makeTapeDelay(AC);
-postFx.connect(satU.input); satU.output.connect(tapeU.input); tapeU.output.connect(eqLow);
-function applyRack(){ satU.set(sat); tapeU.set(tape,tapeTime()); }
+/* ---------- MOD FX : chorus / flanger / phaser ---------- */
+const mod={on:false, mode:0, rate:0.25, depth:0.5, fb:0.4, mix:0.5};
+const PUMP_RATES=[{n:'1/4',steps:4},{n:'1/8',steps:2},{n:'1/2',steps:8}];
+const pump={on:false, rate:0, depth:0.7, rel:0.4};
+function makeModFX(C){
+  const inp=C.createGain(), out=C.createGain();
+  const dry=C.createGain(); inp.connect(dry); dry.connect(out);
+  /* voie délai (chorus + flanger) */
+  const dl=C.createDelay(0.08); const dfb=C.createGain(); dfb.gain.value=0;
+  dl.connect(dfb); dfb.connect(dl);
+  const delWet=C.createGain(); delWet.gain.value=0;
+  inp.connect(dl); dl.connect(delWet); delWet.connect(out);
+  /* voie phaser : 4 passe-tout en série */
+  const aps=[]; let prev=null;
+  for(let i=0;i<4;i++){ const ap=C.createBiquadFilter(); ap.type='allpass'; ap.Q.value=0.6;
+    if(prev) prev.connect(ap); aps.push(ap); prev=ap; }
+  inp.connect(aps[0]);
+  const pfb=C.createGain(); pfb.gain.value=0; aps[3].connect(pfb); pfb.connect(aps[0]);
+  const phWet=C.createGain(); phWet.gain.value=0; aps[3].connect(phWet); phWet.connect(out);
+  /* LFO partagé */
+  const lfo=C.createOscillator(); lfo.frequency.value=1;
+  const ldl=C.createGain(); ldl.gain.value=0; lfo.connect(ldl); ldl.connect(dl.delayTime);
+  const lph=C.createGain(); lph.gain.value=0; lfo.connect(lph);
+  aps.forEach(ap=>lph.connect(ap.frequency));
+  lfo.start();
+  return {input:inp, output:out,
+    set(s){
+      lfo.frequency.value=0.1+s.rate*7;
+      if(s.mode===0){ dl.delayTime.value=0.018; ldl.gain.value=s.depth*0.006; dfb.gain.value=0.05; }
+      else if(s.mode===1){ dl.delayTime.value=0.004; ldl.gain.value=s.depth*0.003; dfb.gain.value=s.fb*0.85; }
+      aps.forEach((ap,i)=>ap.frequency.value=350*(i+1));
+      lph.gain.value=s.mode===2?s.depth*550:0;
+      pfb.gain.value=s.mode===2?s.fb*0.6:0;
+      delWet.gain.value=(s.on&&s.mode<2)?s.mix:0;
+      phWet.gain.value=(s.on&&s.mode===2)?s.mix:0;
+      dry.gain.value=s.on?1-s.mix*0.4:1;
+    }};
+}
+/* ---------- PUMP : sidechain synchronisé ---------- */
+function makePump(C){
+  const g=C.createGain(); g.gain.value=1;
+  return {node:g,
+    duck(t,s){ g.gain.setValueAtTime(Math.max(0.02,1-s.depth*0.95),t);
+      g.gain.linearRampToValueAtTime(1,t+0.04+s.rel*0.5); },
+    reset(){ try{g.gain.cancelScheduledValues(C.currentTime);}catch(e){} g.gain.value=1; }};
+}
+/* câblage : postFx → saturator → mod fx → tape delay → pump → EQ */
+const satU=makeSaturator(AC), modU=makeModFX(AC), tapeU=makeTapeDelay(AC), pumpU=makePump(AC);
+postFx.connect(satU.input); satU.output.connect(modU.input);
+modU.output.connect(tapeU.input); tapeU.output.connect(pumpU.node);
+pumpU.node.connect(eqLow);
+function applyRack(){ satU.set(sat); modU.set(mod); tapeU.set(tape,tapeTime());
+  if(!pump.on) pumpU.reset(); }
 applyRack();
 /* ---------- interface du rack ---------- */
 document.getElementById('satOn').addEventListener('click',function(){ resume();
@@ -2156,6 +2275,103 @@ makeKnob(document.getElementById('tpWowK'),document.getElementById('tpWowV'),
   0.2,v=>{tape.wow=v;applyRack();},v=>Math.round(v*100));
 makeKnob(document.getElementById('tpMixK'),document.getElementById('tpMixV'),
   0.3,v=>{tape.mix=v;applyRack();},v=>Math.round(v*100));
+/* MOD FX */
+document.getElementById('modOn').addEventListener('click',function(){ resume();
+  mod.on=!mod.on; this.classList.toggle('on',mod.on); applyRack(); });
+['CHORUS','FLANGER','PHASER'].forEach((n,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===0?' on':''); b.textContent=n;
+  b.addEventListener('click',()=>{ mod.mode=i;
+    [...document.getElementById('modModes').children].forEach((x,j)=>x.classList.toggle('on',j===i));
+    applyRack(); });
+  document.getElementById('modModes').appendChild(b); });
+makeKnob(document.getElementById('mdRateK'),document.getElementById('mdRateV'),
+  0.25,v=>{mod.rate=v;applyRack();},v=>(0.1+v*7).toFixed(1)+'Hz');
+makeKnob(document.getElementById('mdDepK'),document.getElementById('mdDepV'),
+  0.5,v=>{mod.depth=v;applyRack();},v=>Math.round(v*100));
+makeKnob(document.getElementById('mdFbK'),document.getElementById('mdFbV'),
+  0.4,v=>{mod.fb=v;applyRack();},v=>Math.round(v*100));
+makeKnob(document.getElementById('mdMixK'),document.getElementById('mdMixV'),
+  0.5,v=>{mod.mix=v;applyRack();},v=>Math.round(v*100));
+/* PUMP */
+document.getElementById('pumpOn').addEventListener('click',function(){ resume();
+  pump.on=!pump.on; this.classList.toggle('on',pump.on); applyRack();
+  if(pump.on&&!playing) toast('PUMP actif \u2014 lancez la lecture pour entendre le pompage'); });
+PUMP_RATES.forEach((r,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===0?' on':''); b.textContent=r.n;
+  b.addEventListener('click',()=>{ pump.rate=i;
+    [...document.getElementById('pumpRates').children].forEach((x,j)=>x.classList.toggle('on',j===i)); });
+  document.getElementById('pumpRates').appendChild(b); });
+makeKnob(document.getElementById('ppDepK'),document.getElementById('ppDepV'),
+  0.7,v=>pump.depth=v,v=>Math.round(v*100));
+makeKnob(document.getElementById('ppRelK'),document.getElementById('ppRelV'),
+  0.4,v=>pump.rel=v,v=>Math.round(40+v*500)+'ms');
+
+/* ================== MODULE MIDI (moteur FabKorg embarqué) ================== */
+let midiTarget='pads';
+const MIDI_TARGETS=[{id:'pads',n:'PADS'},{id:'bass',n:'SYNTH\u00c9 BASS'},{id:'wave',n:'NEXUS WAVE'}];
+const midiTgtEl=document.getElementById('midiTargets');
+MIDI_TARGETS.forEach((tg,i)=>{ const b=document.createElement('button');
+  b.className='btn'+(i===0?' on':''); b.textContent=tg.n;
+  b.addEventListener('click',()=>{ midiTarget=tg.id;
+    [...midiTgtEl.children].forEach((x,j)=>x.classList.toggle('on',j===i)); });
+  midiTgtEl.appendChild(b); });
+function midiRefresh(){
+  const list=document.getElementById('midiList'); list.innerHTML='';
+  if(!window.AndroidMidi){
+    list.innerHTML='<p class="labhint">Pont MIDI indisponible ici : lancez l\u2019application sur le t\u00e9l\u00e9phone.</p>'; return; }
+  let devs=[]; try{ devs=JSON.parse(AndroidMidi.listDevices()); }catch(e){}
+  if(!devs.length){
+    list.innerHTML='<p class="labhint">Aucun appareil d\u00e9tect\u00e9. Branchez votre machine en USB (c\u00e2ble OTG), allumez-la, puis RAFRA\u00ceCHIR.</p>'; return; }
+  devs.forEach(d=>{
+    const row=document.createElement('div'); row.className='mididev';
+    const nm=document.createElement('span'); nm.textContent=d.name+' ('+d.outputs+' sortie'+(d.outputs>1?'s':'')+')';
+    const b=document.createElement('button'); b.className='btn green'; b.textContent='CONNECTER';
+    b.addEventListener('click',()=>{ resume(); AndroidMidi.connect(d.id); });
+    row.appendChild(nm); row.appendChild(b); list.appendChild(row);
+  });
+}
+document.getElementById('midiRefresh').addEventListener('click',midiRefresh);
+window.onMidiStatus=function(st){
+  const ok = st==='connecte';
+  const el=document.getElementById('midiState');
+  el.textContent = ok?'CONNECT\u00c9':st.toUpperCase();
+  el.style.color = ok?'var(--green)':'var(--red)';
+  toast('MIDI : '+(ok?'appareil connect\u00e9 \u2014 jouez !':st));
+};
+window.onNativeMidi=function(s,a,b){
+  const cmd=s&0xF0;
+  const led=document.getElementById('midiLed');
+  led.classList.add('onled'); setTimeout(()=>led.classList.remove('onled'),90);
+  if(cmd===0x90 && b>0){ midiNoteOn(a,b/127);
+    document.getElementById('midiLast').textContent='NOTE '+a+' v\u00e9locit\u00e9 '+b; }
+  else if(cmd===0xB0){ midiCC(a,b/127);
+    document.getElementById('midiLast').textContent='CC '+a+' = '+b; }
+};
+function midiNoteOn(note,vel){ resume();
+  if(midiTarget==='pads'){
+    const i=((note-36)%16+16)%16;
+    const g=AC.createGain(); g.gain.value=0.25+vel*0.75; g.connect(master);
+    playSound(PADS[i][1],AC.currentTime,g);
+    recordHit(PADS[i][1]);
+    if(bank==='A'){ const el=padgrid.children[i];
+      if(el){ el.classList.add('hit'); setTimeout(()=>el.classList.remove('hit'),100); } }
+  } else {
+    const semi=Math.max(0,Math.min(PR_ROWS-1,note-24));
+    if(midiTarget==='wave') playWaveNote(semi,AC.currentTime);
+    else playBassNote(semi,AC.currentTime);
+    if(recording && playing){                    // écriture dans le piano roll
+      const len=patLens[curPat];
+      const idx=((Math.round((AC.currentTime-playStart)/stepDur()))%len+len)%len;
+      const cur=noteArr(bassLines[curPat][idx]);
+      if(!cur.includes(semi)){ cur.push(semi); bassLines[curPat][idx]=cur;
+        if(winIsOpen('piano')) renderPiano(); }
+    }
+  }
+}
+function midiCC(cc,v){
+  if(cc===74){ wt.cutoff=v; bassPrm.cutoff=v; }
+  else if(cc===1){ mixFilter.frequency.setTargetAtTime(120*Math.pow(160,v),AC.currentTime,0.02); }
+}
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);

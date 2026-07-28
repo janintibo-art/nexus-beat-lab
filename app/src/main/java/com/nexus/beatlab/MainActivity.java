@@ -4,9 +4,16 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.media.midi.MidiDevice;
+import android.media.midi.MidiDeviceInfo;
+import android.media.midi.MidiManager;
+import android.media.midi.MidiOutputPort;
+import android.media.midi.MidiReceiver;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.View;
@@ -27,6 +34,101 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private final StringBuilder expBuf = new StringBuilder();
     private String expName = "export.wav";
+    private MidiDevice midiDev;
+    private MidiOutputPort midiOut;
+
+    /** Pont MIDI natif — architecture reprise du MidiEngine de FabKorg. */
+    class MidiBridge {
+        private MidiManager mgr() {
+            return (MidiManager) getSystemService(MIDI_SERVICE);
+        }
+
+        @JavascriptInterface
+        public String listDevices() {
+            try {
+                MidiDeviceInfo[] infos = mgr().getDevices();
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < infos.length; i++) {
+                    MidiDeviceInfo in = infos[i];
+                    String name = in.getProperties()
+                            .getString(MidiDeviceInfo.PROPERTY_NAME, "Appareil MIDI");
+                    if (i > 0) sb.append(",");
+                    sb.append("{\"id\":").append(in.getId())
+                      .append(",\"name\":\"").append(name.replace("\"", " ").replace("\\", " "))
+                      .append("\",\"outputs\":").append(in.getOutputPortCount()).append("}");
+                }
+                return sb.append("]").toString();
+            } catch (Exception e) { return "[]"; }
+        }
+
+        @JavascriptInterface
+        public void connect(final int id) {
+            try {
+                for (MidiDeviceInfo in : mgr().getDevices()) {
+                    if (in.getId() != id) continue;
+                    mgr().openDevice(in, new MidiManager.OnDeviceOpenedListener() {
+                        @Override public void onDeviceOpened(MidiDevice device) {
+                            if (device == null) { jsMidiStatus("erreur d'ouverture"); return; }
+                            closeMidi();
+                            midiDev = device;
+                            midiOut = device.openOutputPort(0);
+                            if (midiOut != null) {
+                                midiOut.connect(new ParserReceiver());
+                                jsMidiStatus("connecte");
+                            } else jsMidiStatus("pas de port de sortie");
+                        }
+                    }, new Handler(Looper.getMainLooper()));
+                    return;
+                }
+                jsMidiStatus("appareil introuvable");
+            } catch (Exception e) { jsMidiStatus("erreur"); }
+        }
+
+        @JavascriptInterface
+        public void disconnect() { closeMidi(); jsMidiStatus("deconnecte"); }
+    }
+
+    private void closeMidi() {
+        try { if (midiOut != null) midiOut.close(); } catch (Exception e) {}
+        try { if (midiDev != null) midiDev.close(); } catch (Exception e) {}
+        midiOut = null; midiDev = null;
+    }
+
+    /** Analyse des flux MIDI avec running status (comme dans FabKorg). */
+    class ParserReceiver extends MidiReceiver {
+        private int status = 0, d1 = -1;
+        @Override
+        public void onSend(byte[] msg, int off, int cnt, long ts) {
+            for (int i = 0; i < cnt; i++) {
+                int b = msg[off + i] & 0xFF;
+                if (b >= 0xF8) continue;                 // horloge/temps réel : ignoré ici
+                if (b >= 0x80) { status = b; d1 = -1; continue; }
+                if (status == 0 || status >= 0xF0) continue;
+                int cmd = status & 0xF0;
+                if (cmd == 0xC0 || cmd == 0xD0) { sendMidiJs(status, b, 0); }
+                else if (d1 < 0) { d1 = b; }
+                else { sendMidiJs(status, d1, b); d1 = -1; }
+            }
+        }
+    }
+
+    private void sendMidiJs(final int s, final int a, final int b) {
+        runOnUiThread(new Runnable() {
+            @Override public void run() {
+                if (webView != null) webView.evaluateJavascript(
+                    "window.onNativeMidi&&window.onNativeMidi(" + s + "," + a + "," + b + ")", null);
+            }
+        });
+    }
+
+    private void jsMidiStatus(final String st) {
+        runOnUiThread(new Runnable() {
+            @Override public void run() {
+                if (webView != null) webView.evaluateJavascript(
+                    "window.onMidiStatus&&window.onMidiStatus('" + st + "')", null);
+            }
+        });
+    }
 
     /** Pont JS → Android pour enregistrer les fichiers exportés (WAV, JSON). */
     class ExportBridge {
@@ -99,6 +201,8 @@ public class MainActivity extends Activity {
 
         // Pont d'export des fichiers (WAV, projet JSON)
         webView.addJavascriptInterface(new ExportBridge(), "AndroidExport");
+        // Pont MIDI natif (claviers et machines Korg en USB)
+        webView.addJavascriptInterface(new MidiBridge(), "AndroidMidi");
 
         // Sélecteur de fichiers pour charger des samples audio
         webView.setWebChromeClient(new WebChromeClient() {
