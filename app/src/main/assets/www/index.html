@@ -194,6 +194,9 @@
   #labtracks{display:flex;gap:8px;}
   #labcols{display:grid;grid-template-columns:1fr 660px;gap:22px;padding-top:12px;}
   #labmix,#labeq{display:flex;gap:20px;align-items:flex-end;padding-top:6px;}
+  #labinserts{display:flex;flex-direction:column;gap:8px;}
+  .insrow{display:flex;gap:14px;align-items:flex-end;padding:8px 10px;border-radius:9px;
+    background:linear-gradient(180deg,#20202a,#181820);border:1px solid var(--line);}
   #labEqCv{display:block;width:100%;max-width:620px;height:150px;background:var(--inset);
     border:1px solid var(--line);border-radius:8px;}
   .labhint{font-size:11px;color:var(--dim);padding:10px 4px 0;line-height:1.5;}
@@ -532,10 +535,13 @@
           <div class="knob" style="--kc:var(--pink)"><div class="kbody" id="labMdK"></div><label>M&Eacute;DIUMS 1kHz</label><div class="kv" id="labMdV">0dB</div></div>
           <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="labHiK"></div><label>AIGUS 4,2kHz</label><div class="kv" id="labHiV">0dB</div></div>
         </div>
+        <div class="ptitle" style="padding:16px 0 4px">INSERTS <small style="font-weight:400;color:var(--dim)">effets propres &agrave; cette piste</small></div>
+        <div id="labinserts"></div>
       </div>
     </div>
     <p class="labhint">Chaque piste a sa tranche compl&egrave;te : pitch, filtre, decay, volume, panoramique, mute/solo et &eacute;galiseur 3 bandes &mdash; le tout reproduit &agrave; l'export.
-    <b>+ PISTES AUDIO</b> importe un ou plusieurs fichiers d'un coup : chacun devient une piste jouable dans le s&eacute;quenceur (jusqu'&agrave; 16). Double-tap sur un potentiom&egrave;tre pour le remettre &agrave; z&eacute;ro.</p>
+    <b>+ PISTES AUDIO</b> importe un ou plusieurs fichiers d'un coup : chacun devient une piste jouable dans le s&eacute;quenceur (jusqu'&agrave; 16).
+    Les <b>INSERTS</b> ajoutent jusqu'&agrave; 2 effets propres &agrave; la piste, plac&eacute;s avant son &eacute;galiseur. Double-tap sur un potentiom&egrave;tre pour le remettre &agrave; z&eacute;ro.</p>
   </div>
 </div>
 
@@ -1020,8 +1026,9 @@ const TRACK_COLORS=['#ff9a2e','#ff2e88','#a04dff','#2ee6ff','#39d98a','#ffd83a',
 let userBufs={};              // buffers des pistes ajoutées par l'utilisateur (clé = id)
 let tidSeq=0;
 const VELS=[0,0.45,0.8,1.0];   /* 0 vide, 1 doux, 2 normal, 3 accent (comme Studio Tibo) */
-/* tranche de console par piste : gain → EQ 3 bandes → panoramique → master */
+/* tranche de console par piste : gain → inserts → EQ 3 bandes → panoramique → master */
 const trackGains=[], trackEQ=[], trackPan=[];
+let inserts=[]; const _insNodes=[];
 function makeStrip(){
   const g=AC.createGain(); g.gain.value=0.85;
   const lo=AC.createBiquadFilter(); lo.type='lowshelf';  lo.frequency.value=200;
@@ -1030,6 +1037,7 @@ function makeStrip(){
   const pn=AC.createStereoPanner ? AC.createStereoPanner() : AC.createGain();
   g.connect(lo); lo.connect(md); md.connect(hi); hi.connect(pn); pn.connect(master);
   trackGains.push(g); trackEQ.push({lo,md,hi}); trackPan.push(pn);
+  inserts.push([null,null]); _insNodes.push([]);
 }
 TRACKS.forEach(makeStrip);
 const trackMute  = TRACKS.map(()=>false);
@@ -1742,6 +1750,7 @@ function labSync(){
   kLabPan.set(((trackPan[ti].pan?trackPan[ti].pan.value:0)+1)/2);
   kLabLo.set((e.lo.gain.value+15)/30); kLabMd.set((e.md.gain.value+15)/30);
   kLabHi.set((e.hi.gain.value+15)/30);
+  if(typeof buildInserts==='function') buildInserts();
   document.getElementById('labKeep').classList.toggle('on',!!p.keep);
   document.getElementById('labMute').classList.toggle('on',trackMute[ti]);
   document.getElementById('labSolo').classList.toggle('on',trackSolo[ti]);
@@ -1864,7 +1873,8 @@ function buildOfflineChain(C){
     const hi=C.createBiquadFilter(); hi.type='highshelf'; hi.frequency.value=4200; hi.gain.value=e.hi.gain.value;
     const pn=C.createStereoPanner?C.createStereoPanner():C.createGain();
     if(pn.pan&&trackPan[ti].pan) pn.pan.value=trackPan[ti].pan.value;
-    g.connect(lo); lo.connect(md); md.connect(hi); hi.connect(pn); pn.connect(m);
+    applyInsertsOffline(C,ti,g,lo);
+    lo.connect(md); md.connect(hi); hi.connect(pn); pn.connect(m);
     return g; });
   const bassOut=C.createGain(); bassOut.gain.value=bassGain.gain.value; bassOut.connect(m);
   // pistes audio enregistrées (bouclées sur toute la durée du rendu)
@@ -2080,7 +2090,8 @@ function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bass
   wt:{...wt}, synthEngine, sat:{...sat}, tape:{...tape}, mod:{...mod}, pump:{...pump},
   fx:{...fx}, swing, kitIdx, clips, plLen, plActive,
   scale:{root:scaleRoot,key:scaleKey,snap:scaleSnap},
-  tracks:TRACKS.map(t=>({name:t.name,sound:t.sound,color:t.color,uid:t.uid||0}))}; }
+  tracks:TRACKS.map(t=>({name:t.name,sound:t.sound,color:t.color,uid:t.uid||0})),
+  inserts:inserts.map(l=>(l||[null,null]).map(x=>x?{id:x.id,params:{...x.params}}:null))}; }
 function applyProject(d){
   setBpm(d.bpm||128);
   if(d.patterns){ patterns=d.patterns.map(p=>pad32(p)); }
@@ -2131,6 +2142,11 @@ function applyProject(d){
     selTrack=Math.min(selTrack,TRACKS.length-1);
     if(typeof rebuildTrackUI==='function') rebuildTrackUI();
   }
+  if(d.inserts){ inserts=d.inserts.map(l=>(l||[null,null]).map(x=>
+      x&&PLUGINS[x.id]?{id:x.id,params:{...x.params}}:null));
+    while(inserts.length<TRACKS.length) inserts.push([null,null]);
+    TRACKS.forEach((_,ti)=>rebuildInserts(ti));
+    if(typeof buildInserts==='function'&&winIsOpen('lab')) buildInserts(); }
   if(d.chan) d.chan.forEach((c,ti)=>{ if(ti>=TRACKS.length) return;
     trackGains[ti].gain.value=c.g;
     if(trackPan[ti].pan) trackPan[ti].pan.value=c.pan||0;
@@ -3363,6 +3379,7 @@ function removeTrack(ti){
   if(trk.uid) delete userBufs[trk.uid];
   try{ trackPan[ti].disconnect(); }catch(e){}
   TRACKS.splice(ti,1); trackGains.splice(ti,1); trackEQ.splice(ti,1); trackPan.splice(ti,1);
+  inserts.splice(ti,1); _insNodes.splice(ti,1);
   trackMute.splice(ti,1); trackSolo.splice(ti,1); sndParams.splice(ti,1);
   patterns.forEach(p=>p.splice(ti,1));
   selTrack=Math.min(selTrack,TRACKS.length-1);
@@ -3462,6 +3479,145 @@ function unzipStore(buf){
 const sanitizeName=s=>s.replace(/[^\w\u00C0-\u00ff .-]+/g,'_').slice(0,40)||'piste';
 /* buffer audio → octets WAV (réutilise l'encodeur d'export) */
 async function bufToBytes(b){ return new Uint8Array(await bufToWav(b).arrayBuffer()); }
+
+/* ================== INSERTS PAR TRANCHE (architecture de plugins) ==================
+   Chaque effet est décrit une fois et instancié à la demande — mêmes nœuds Web Audio
+   en direct et à l'export, donc le rendu est identique. */
+const PLUGINS={};
+function registerPlugin(d){ PLUGINS[d.id]=d; return d; }
+
+registerPlugin({ id:'drive', name:'Drive', color:'#ff3b30',
+  params:[{k:'amt',lbl:'DRIVE',def:0.4},{k:'mix',lbl:'MIX',def:0.8}],
+  create(c){ const inp=c.createGain(), out=c.createGain();
+    const dry=c.createGain(), wet=c.createGain(), ws=c.createWaveShaper(); ws.oversample='2x';
+    inp.connect(dry); dry.connect(out); inp.connect(ws); ws.connect(wet); wet.connect(out);
+    return {input:inp,output:out,set(p){
+      const k=1+p.amt*28, n=1024, cu=new Float32Array(n);
+      for(let i=0;i<n;i++){ const x=i/(n-1)*2-1; cu[i]=Math.tanh(k*x)/Math.tanh(k); }
+      ws.curve=cu; wet.gain.value=p.mix*0.9; dry.gain.value=1-p.mix*0.7; }};
+  }});
+registerPlugin({ id:'filter', name:'Filtre', color:'#2ee6ff',
+  params:[{k:'freq',lbl:'FR\u00c9QUENCE',def:1},{k:'res',lbl:'R\u00c9SONANCE',def:0.15},{k:'type',lbl:'HP/LP',def:0}],
+  create(c){ const inp=c.createGain(), out=c.createGain(), f=c.createBiquadFilter();
+    inp.connect(f); f.connect(out);
+    return {input:inp,output:out,set(p){
+      f.type=p.type>0.5?'highpass':'lowpass';
+      f.frequency.value = p.type>0.5 ? 20*Math.pow(120,p.freq) : 120*Math.pow(160,p.freq);
+      f.Q.value=0.5+p.res*16; }};
+  }});
+registerPlugin({ id:'bitcrush', name:'Bitcrush', color:'#ffd83a',
+  params:[{k:'bits',lbl:'BITS',def:0.55},{k:'mix',lbl:'MIX',def:0.7}],
+  create(c){ const inp=c.createGain(), out=c.createGain();
+    const dry=c.createGain(), wet=c.createGain(), ws=c.createWaveShaper();
+    inp.connect(dry); dry.connect(out); inp.connect(ws); ws.connect(wet); wet.connect(out);
+    return {input:inp,output:out,set(p){
+      const steps=Math.max(2,Math.round(Math.pow(2,1+p.bits*10)));
+      const n=2048, cu=new Float32Array(n);
+      for(let i=0;i<n;i++){ const x=i/(n-1)*2-1; cu[i]=Math.round(x*steps)/steps; }
+      ws.curve=cu; wet.gain.value=p.mix; dry.gain.value=1-p.mix; }};
+  }});
+registerPlugin({ id:'comp', name:'Compresseur', color:'#39d98a',
+  params:[{k:'thr',lbl:'SEUIL',def:0.6},{k:'ratio',lbl:'RATIO',def:0.3},{k:'gain',lbl:'GAIN',def:0.3}],
+  create(c){ const inp=c.createGain(), out=c.createGain(), k=c.createDynamicsCompressor();
+    const mk=c.createGain();
+    inp.connect(k); k.connect(mk); mk.connect(out);
+    return {input:inp,output:out,set(p){
+      k.threshold.value=p.thr*45-48; k.ratio.value=1+p.ratio*18;
+      k.attack.value=0.004; k.release.value=0.18;
+      mk.gain.value=Math.pow(10,(p.gain*16-4)/20); }};
+  }});
+registerPlugin({ id:'autopan', name:'AutoPan', color:'#a04dff',
+  params:[{k:'rate',lbl:'VITESSE',def:0.3},{k:'depth',lbl:'AMPLEUR',def:0.7}],
+  create(c){ const inp=c.createGain(), out=c.createGain();
+    const pn=c.createStereoPanner?c.createStereoPanner():null;
+    const lfo=c.createOscillator(), lg=c.createGain(); lfo.frequency.value=0.8;
+    if(pn){ lfo.connect(lg); lg.connect(pn.pan); inp.connect(pn); pn.connect(out); }
+    else inp.connect(out);
+    lfo.start();
+    return {input:inp,output:out,set(p){
+      lfo.frequency.value=0.1+p.rate*7; lg.gain.value=p.depth*0.95; }};
+  }});
+registerPlugin({ id:'echo', name:'Echo', color:'#ff2e88',
+  params:[{k:'time',lbl:'TEMPS',def:0.5},{k:'fb',lbl:'FEEDBACK',def:0.35},{k:'mix',lbl:'MIX',def:0.3}],
+  create(c){ const inp=c.createGain(), out=c.createGain();
+    const dl=c.createDelay(2), fb=c.createGain(), wet=c.createGain();
+    const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=4000;
+    inp.connect(out); inp.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl);
+    lp.connect(wet); wet.connect(out);
+    return {input:inp,output:out,set(p){
+      dl.delayTime.value=0.04+p.time*0.7; fb.gain.value=p.fb*0.8; wet.gain.value=p.mix; }};
+  }});
+const PLUGIN_IDS=Object.keys(PLUGINS);
+
+/* état : jusqu'à 2 inserts par piste (inserts[] déclaré avec les tranches) */
+function defInsertParams(id){ const o={};
+  PLUGINS[id].params.forEach(p=>o[p.k]=p.def); return o; }
+/* (re)construit la chaîne d'inserts d'une piste : gain → inserts → EQ */
+function rebuildInserts(ti){
+  const g=trackGains[ti], e=trackEQ[ti];
+  try{ g.disconnect(); }catch(err){}
+  (_insNodes[ti]||[]).forEach(n=>{ try{n.output.disconnect();}catch(err){} });
+  const list=(inserts[ti]||[]).filter(x=>x&&x.id&&PLUGINS[x.id]);
+  const nodes=list.map(x=>{ const n=PLUGINS[x.id].create(AC); n.set(x.params); return n; });
+  _insNodes[ti]=nodes;
+  let cur=g;
+  nodes.forEach(n=>{ cur.connect(n.input); cur=n.output; });
+  cur.connect(e.lo);
+}
+function setInsertParam(ti,slot,key,val){
+  const ins=inserts[ti][slot]; if(!ins) return;
+  ins.params[key]=val;
+  const n=_insNodes[ti]&&_insNodes[ti][slot];
+  if(n) n.set(ins.params);
+}
+/* insère la même chaîne dans un contexte de rendu hors ligne */
+function applyInsertsOffline(C,ti,from,to){
+  const list=(inserts[ti]||[]).filter(x=>x&&x.id&&PLUGINS[x.id]);
+  let cur=from;
+  list.forEach(x=>{ const n=PLUGINS[x.id].create(C); n.set(x.params);
+    cur.connect(n.input); cur=n.output; });
+  cur.connect(to);
+}
+
+/* ---------- interface des inserts ---------- */
+const NINS=2;
+function buildInserts(){
+  const box=document.getElementById('labinserts'); if(!box) return;
+  const ti=selTrack;
+  if(!inserts[ti]) inserts[ti]=[null,null];
+  box.innerHTML='';
+  for(let slot=0;slot<NINS;slot++){
+    const cur=inserts[ti][slot];
+    const row=document.createElement('div'); row.className='insrow';
+    const sel=document.createElement('select'); sel.className='prsel';
+    const o0=document.createElement('option'); o0.value=''; o0.textContent='INSERT '+(slot+1)+' \u2014 vide';
+    sel.appendChild(o0);
+    PLUGIN_IDS.forEach(id=>{ const o=document.createElement('option');
+      o.value=id; o.textContent=PLUGINS[id].name; sel.appendChild(o); });
+    sel.value=cur?cur.id:'';
+    sel.addEventListener('change',()=>{ pushUndo(true);
+      inserts[ti][slot]= sel.value ? {id:sel.value,params:defInsertParams(sel.value)} : null;
+      rebuildInserts(ti); buildInserts(); scheduleAutosave(); });
+    row.appendChild(sel);
+    if(cur){
+      const col=PLUGINS[cur.id].color;
+      row.style.borderLeft='3px solid '+col;
+      PLUGINS[cur.id].params.forEach(pd=>{
+        const w=document.createElement('div'); w.className='knob'; w.style.setProperty('--kc',col);
+        w.style.width='66px';
+        const kb=document.createElement('div'); kb.className='kbody';
+        const lb=document.createElement('label'); lb.textContent=pd.lbl;
+        const kv=document.createElement('div'); kv.className='kv';
+        w.appendChild(kb); w.appendChild(lb); w.appendChild(kv);
+        row.appendChild(w);
+        makeKnob(kb,kv,cur.params[pd.k],
+          v=>{ setInsertParam(ti,slot,pd.k,v); scheduleAutosave(); },
+          v=>pd.k==='type' ? (v>0.5?'HP':'LP') : Math.round(v*100));
+      });
+    }
+    box.appendChild(row);
+  }
+}
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
