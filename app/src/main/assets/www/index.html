@@ -347,6 +347,39 @@
   #midiTargets{display:flex;gap:8px;padding-bottom:10px;}
   #midiMon{font-size:12px;color:var(--dim);padding:4px 0;}
   #midiMon span{color:var(--cyan);font-weight:800;}
+  /* ---------- filtre DJ ---------- */
+  #djpanel{padding:0 0 14px;}
+  #djwrap{display:flex;gap:12px;align-items:center;padding:6px 16px 0;}
+  #djtrack{flex:1;height:62px;border-radius:14px;position:relative;cursor:grab;touch-action:none;
+    background:linear-gradient(90deg,rgba(255,154,46,.22),rgba(255,255,255,.05) 42%,
+      rgba(255,255,255,.05) 58%,rgba(46,230,255,.22));
+    border:1px solid var(--line);box-shadow:inset 0 3px 10px rgba(0,0,0,.75);
+    display:flex;align-items:center;justify-content:space-between;
+    font-size:9px;font-weight:800;letter-spacing:1.4px;color:#8a8aa2;overflow:hidden;}
+  #djtrack:active{cursor:grabbing;}
+  #djzoneL{padding-left:14px;} #djzoneR{padding-right:14px;}
+  #djmid{position:absolute;left:50%;top:8px;bottom:8px;width:2px;background:#ffffff28;
+    transform:translateX(-50%);}
+  #djcap{position:absolute;top:5px;bottom:5px;width:74px;border-radius:11px;left:50%;
+    transform:translateX(-50%);
+    background:linear-gradient(180deg,#4d4d5e,#25252f);border:1px solid #6a6a80;
+    box-shadow:0 4px 10px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.3);
+    display:flex;align-items:center;justify-content:center;
+    transition:left .16s var(--ease), box-shadow .12s var(--ease);}
+  #djcap.active{transition:none;}
+  #djval{font-size:9px;font-weight:800;letter-spacing:.6px;color:#fff;}
+  #djpanel.lowpass #djcap{box-shadow:0 0 20px -2px var(--orange),0 4px 10px rgba(0,0,0,.7);}
+  #djpanel.highpass #djcap{box-shadow:0 0 20px -2px var(--cyan),0 4px 10px rgba(0,0,0,.7);}
+  #buildrow{display:flex;gap:10px;flex-wrap:wrap;}
+  .buildbtn{min-width:120px;padding:16px 14px;border-radius:12px;cursor:pointer;text-align:center;
+    font-size:13px;font-weight:900;letter-spacing:1px;
+    background:linear-gradient(180deg,#3a2a48,#241a30);border:1px solid #5c4478;color:#e6d6ff;
+    box-shadow:0 4px 9px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.12);
+    transition:transform .1s var(--ease), box-shadow .14s var(--ease);}
+  .buildbtn:active{transform:translateY(1px) scale(.98);}
+  .buildbtn.running{background:linear-gradient(180deg,#a04dff,#6c2bc4);color:#fff;border-color:#d0a8ff;
+    box-shadow:0 0 22px -3px var(--purple);animation:buildPulse .35s steps(2) infinite;}
+  @keyframes buildPulse{50%{filter:brightness(1.25);}}
   #perfScenes{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;}
   .scene{height:76px;border-radius:12px;font-size:17px;font-weight:900;letter-spacing:1px;cursor:pointer;
     display:flex;align-items:center;justify-content:center;color:var(--txt);
@@ -900,11 +933,27 @@
 </div>
 <div class="modwin" id="win-perf">
   <div class="panel mwhead">
-    <span>&#128293; PERFORM <small>jouez votre set en live : sc&egrave;nes, coupures de pistes, effets punch-in</small></span>
+    <span>&#128293; LIVE <small>filtre DJ, mont&eacute;es, sc&egrave;nes, coupures de pistes et effets punch-in</small></span>
     <span style="flex:1"></span>
     <button class="btn on" id="perfQuant">CHANGEMENT PAR MESURE</button>
     <button class="btn green" id="perfPlay">&#9654; PLAY</button>
     <button class="btn" data-win="studio">&#8592; STUDIO</button>
+  </div>
+  <div class="panel" id="djpanel">
+    <div class="ptitle">FILTRE DJ <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">glissez le curseur &mdash; gauche : passe-bas &middot; droite : passe-haut &middot; rel&acirc;chez pour revenir au centre</small></div>
+    <div id="djwrap">
+      <div id="djtrack">
+        <div id="djzoneL">GRAVES SEULS</div>
+        <div id="djmid"></div>
+        <div id="djzoneR">AIGUS SEULS</div>
+        <div id="djcap"><span id="djval">NEUTRE</span></div>
+      </div>
+      <button class="btn" id="djHold">MAINTENIR</button>
+    </div>
+  </div>
+  <div class="panel" style="padding:14px 16px 16px">
+    <div class="ptitle" style="padding:0 0 10px">MONT&Eacute;E <small style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">le filtre s'ouvre, le roulement s'acc&eacute;l&egrave;re, la r&eacute;verb monte &mdash; puis tout retombe sur le temps</small></div>
+    <div id="buildrow"></div>
   </div>
   <div class="panel" style="padding:16px">
     <div class="ptitle" style="padding:0 0 10px">SC&Egrave;NES <small>le pattern en attente clignote, il part au d&eacute;but de la mesure suivante</small></div>
@@ -1477,6 +1526,7 @@ function scheduler(){
     const len=patLens[curPat];
     if(step>=len) step=0;
     if(pump.on && step%PUMP_RATES[pump.rate].steps===0) pumpU.duck(t,pump);
+    if(build) buildTick(t,step);
     if(autoOn){ const ad=autoData[curPat];
       AUTO_TARGETS.forEach((tg,ti)=>{ const v=ad[ti][step]; if(v!==null) tg.apply(v); }); }
     TRACKS.forEach((trk,ti)=>{ const lv=+pattern[ti][step]||0;
@@ -1583,6 +1633,7 @@ function stop(){ playing=false; clearInterval(timer);
   playBtn.classList.remove('on'); renderChain();
   if(typeof renderPl==='function'&&winIsOpen('pl')) renderPl();
   stopAudioPlayback();
+  if(typeof endBuild==='function') endBuild();
   pumpU.reset();
   if(audioRecording){ stopAudioRec(); recBtn.classList.remove('on'); }
   clearHighlight(); }
@@ -2109,6 +2160,10 @@ function buildOfflineChain(C){
   const og=C.createGain(); og.gain.value=outGain.gain.value;
   const mf=C.createBiquadFilter(); mf.type='lowpass';
   mf.frequency.value=mixFilter.frequency.value; mf.Q.value=1.2;
+  const dLP=C.createBiquadFilter(); dLP.type='lowpass';
+  dLP.frequency.value=djLP.frequency.value; dLP.Q.value=djLP.Q.value;
+  const dHP=C.createBiquadFilter(); dHP.type='highpass';
+  dHP.frequency.value=djHP.frequency.value; dHP.Q.value=djHP.Q.value;
   /* mastering hors ligne */
   const cp=C.createDynamicsCompressor();
   cp.threshold.value=comp.threshold.value; cp.ratio.value=comp.ratio.value;
@@ -2117,7 +2172,7 @@ function buildOfflineChain(C){
   const lm=C.createDynamicsCompressor();
   lm.threshold.value=limiter.threshold.value; lm.ratio.value=limiter.ratio.value;
   lm.attack.value=0.001; lm.release.value=0.06; lm.knee.value=0;
-  m.connect(mf); mf.connect(sh); sh.connect(post);
+  m.connect(mf); mf.connect(dLP); dLP.connect(dHP); dHP.connect(sh); sh.connect(post);
   const sO=makeSaturator(C); sO.set(sat);
   const mO=makeModFX(C); mO.set(mod);
   const tO=makeTapeDelay(C); tO.set(tape,tapeTime());
@@ -3893,6 +3948,105 @@ function buildInserts(){
     box.appendChild(row);
   }
 }
+
+/* ================== FILTRE DJ + MONTÉES (mode LIVE) ================== */
+/* filtre unique inséré sur le bus master : à gauche passe-bas, à droite passe-haut */
+const djLP=AC.createBiquadFilter(); djLP.type='lowpass';  djLP.frequency.value=20000; djLP.Q.value=1;
+const djHP=AC.createBiquadFilter(); djHP.type='highpass'; djHP.frequency.value=20;    djHP.Q.value=1;
+mixFilter.disconnect();
+mixFilter.connect(djLP); djLP.connect(djHP); djHP.connect(shaper);
+let djPos=0, djHold=false;                       /* -1 = graves seuls, +1 = aigus seuls */
+function applyDj(p){
+  djPos=Math.max(-1,Math.min(1,p));
+  const t=AC.currentTime, k=Math.abs(djPos);
+  const pan=document.getElementById('djpanel');
+  if(djPos<-0.04){                               /* passe-bas : on referme vers les graves */
+    djLP.frequency.setTargetAtTime(20000*Math.pow(0.0055,k),t,0.02);
+    djHP.frequency.setTargetAtTime(20,t,0.02);
+    djLP.Q.value=0.7+k*7;
+    pan.className='panel lowpass';
+  } else if(djPos>0.04){                          /* passe-haut : on coupe le bas */
+    djHP.frequency.setTargetAtTime(20*Math.pow(320,k),t,0.02);
+    djLP.frequency.setTargetAtTime(20000,t,0.02);
+    djHP.Q.value=0.7+k*7;
+    pan.className='panel highpass';
+  } else {
+    djLP.frequency.setTargetAtTime(20000,t,0.02);
+    djHP.frequency.setTargetAtTime(20,t,0.02);
+    djLP.Q.value=djHP.Q.value=0.7;
+    pan.className='panel';
+  }
+  const cap=document.getElementById('djcap');
+  cap.style.left=(50+djPos*42)+'%';
+  document.getElementById('djval').textContent =
+    djPos<-0.04 ? Math.round(k*100)+'% BAS' : djPos>0.04 ? Math.round(k*100)+'% HAUT' : 'NEUTRE';
+}
+(function initDj(){
+  const tr=document.getElementById('djtrack'), cap=document.getElementById('djcap');
+  function posFrom(x){ const r=tr.getBoundingClientRect();
+    return Math.max(-1,Math.min(1,((x-r.left)/r.width-0.5)*2.38)); }
+  tr.addEventListener('pointerdown',e=>{ e.preventDefault(); resume();
+    tr.setPointerCapture(e.pointerId); cap.classList.add('active'); applyDj(posFrom(e.clientX)); });
+  tr.addEventListener('pointermove',e=>{ if(e.buttons) applyDj(posFrom(e.clientX)); });
+  function release(){ cap.classList.remove('active');
+    if(!djHold) applyDj(0); }                      /* ressort au centre, sauf si maintenu */
+  tr.addEventListener('pointerup',release);
+  tr.addEventListener('pointercancel',release);
+  document.getElementById('djHold').addEventListener('click',function(){
+    djHold=!djHold; this.classList.toggle('on',djHold);
+    toast(djHold?'Position maintenue au rel\u00e2chement':'Retour au centre au rel\u00e2chement');
+  });
+  applyDj(0);
+})();
+
+/* ---------- montées : filtre + roulement + réverb, calées sur la fin de mesure ---------- */
+const BUILDS=[{n:'MONT\u00c9E 2',bars:2},{n:'MONT\u00c9E 4',bars:4},{n:'MONT\u00c9E 8',bars:8}];
+let build=null;                       /* {stepsLeft, total, el, rev0, revOn0} */
+function startBuild(bars,el){
+  if(build){ endBuild(); return; }
+  resume(); if(!playing) play();
+  const total=bars*patLens[curPat];
+  build={left:total,total,el,rev0:fx.revMix,revOn0:fx.rev};
+  fx.rev=true; applyFx();
+  el.classList.add('running');
+  toast('Mont\u00e9e sur '+bars+' mesure'+(bars>1?'s':'')+' \u2014 touchez de nouveau pour arr\u00eater');
+}
+function endBuild(){
+  if(!build) return;
+  build.el.classList.remove('running');
+  fx.revMix=build.rev0; fx.rev=build.revOn0; applyFx();
+  applyDj(0);
+  build=null;
+}
+/* appelé à chaque pas par le séquenceur */
+function buildTick(t,step){
+  if(!build) return;
+  const prog=1-(build.left/build.total);          /* 0 → 1 sur la durée de la montée */
+  applyDj(-0.72*(1-prog)+0.62*prog*prog);         /* on ferme, puis on ouvre vers l'aigu */
+  fx.revMix=Math.min(0.75,build.rev0+prog*0.5); applyFx();
+  /* roulement de caisse claire qui s'accélère */
+  const density = prog<0.4 ? 4 : prog<0.7 ? 2 : prog<0.9 ? 1 : 1;
+  const snareTi=TRACKS.findIndex(t2=>t2.sound==='snare');
+  if(snareTi>=0 && step%density===0){
+    const v=0.32+prog*0.68;
+    playTrack(snareTi,t,null,v);
+    if(prog>0.9) playTrack(snareTi,t+stepDur()/2,null,v);   /* doubles-croches finales */
+  }
+  build.left--;
+  if(build.left<=0){                              /* la montée retombe pile sur le temps */
+    endBuild();
+    const crashTi=TRACKS.findIndex(t2=>t2.sound==='crash');
+    if(crashTi>=0) playTrack(crashTi,t,null,1);
+    buzz(30);
+  }
+}
+(function initBuilds(){
+  const row=document.getElementById('buildrow');
+  BUILDS.forEach(b=>{ const d=document.createElement('div');
+    d.className='buildbtn'; d.textContent=b.n;
+    d.addEventListener('pointerdown',e=>{ e.preventDefault(); startBuild(b.bars,d); });
+    row.appendChild(d); });
+})();
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
