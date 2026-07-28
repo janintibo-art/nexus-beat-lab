@@ -10,8 +10,8 @@ android {
         applicationId "com.nexus.beatlab"
         minSdk 24
         targetSdk 34
-        versionCode 37
-        versionName "3.7"
+        versionCode 38
+        versionName "3.8"
     }
 
     buildTypes {

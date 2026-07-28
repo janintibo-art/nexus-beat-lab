@@ -172,6 +172,9 @@
   .playcol{outline:2px solid var(--orange);outline-offset:1px;border-radius:7px;
     background-color:var(--amber-soft);}
   .colhead.playcol{outline:none;color:var(--orange);text-shadow:0 0 8px var(--orange);}
+  #humanpanel{display:none;align-items:center;gap:6px;flex-wrap:wrap;
+    padding:4px 12px 8px;border-top:1px solid var(--line-soft);margin-top:4px;}
+  #humanpanel .btn{padding:0 11px;min-height:34px;font-size:10px;}
   #patbtns{display:flex;gap:5px;}
   .pbtn{width:36px;padding:9px 0;font-size:11px;}
   #songrow{display:none;align-items:center;gap:9px;padding:2px 14px 8px;}
@@ -591,7 +594,21 @@
         <button class="btn" id="pasteBtn">COLLER</button>
         <div class="knob" style="--kc:var(--cyan)"><div class="kbody" id="swingKnob"></div><label>SWING</label><div class="kv" id="swingVal">0%</div></div>
         <span style="flex:1"></span>
+        <button class="btn" id="humanBtn">&#127922; HUMANISER</button>
         <button class="btn" id="clearBtn">&#10005; EFFACER</button>
+      </div>
+      <div id="humanpanel">
+        <span class="prtlbl">DOSE</span>
+        <button class="btn" data-hum="0">L&Eacute;GER</button>
+        <button class="btn on" data-hum="1">MOYEN</button>
+        <button class="btn" data-hum="2">FRANC</button>
+        <span class="prtlbl" style="margin-left:8px">AGIT SUR</span>
+        <button class="btn on" id="humVel">V&Eacute;LOCIT&Eacute;S</button>
+        <button class="btn on" id="humTime">TIMING</button>
+        <button class="btn" id="humGhost">NOTES FANT&Ocirc;MES</button>
+        <button class="btn" id="humApply">&#10003; APPLIQUER</button>
+        <button class="btn" id="humLive">EN CONTINU</button>
+        <span class="labhint" style="padding:0 0 0 6px">le timing agit &agrave; la lecture, les v&eacute;locit&eacute;s s'inscrivent dans la grille</span>
       </div>
       <div id="songrow">
         <span class="chlabel">CHA&Icirc;NE</span>
@@ -1630,7 +1647,12 @@ function scheduler(){
     if(brkMode) brkTick(t,step);
     if(!brkSilencesPattern()){
       TRACKS.forEach((trk,ti)=>{ const lv=+pattern[ti][step]||0;
-        if(lv && audible(ti)) playTrack(ti,t,null,VELS[lv]); });
+        if(lv && audible(ti)){
+          const off=humTimeOffset(ti,step);
+          /* variation légère du niveau à chaque frappe, si l'humanisation tourne en continu */
+          const jitter = (hum.live&&hum.vel) ? 1-Math.random()*HUM_DOSES[hum.dose].vel*0.6 : 1;
+          playTrack(ti,Math.max(AC.currentTime,t+off),null,VELS[lv]*jitter);
+        }});
     }
     const bn=bassLines[curPat][step];
     if(bn!==null && bn!==undefined) noteArr(bn).forEach(n=>playNoteObj(n,t));
@@ -2527,7 +2549,7 @@ function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bass
   fx:{...fx}, swing, kitIdx, clips, plLen, plActive,
   scale:{root:scaleRoot,key:scaleKey,snap:scaleSnap},
   midiOut:{chan:midiChan, clock:clockOn, map:midiSendMap.map(m=>m?{on:m.on,note:m.note}:null)},
-  vx:{...vx},
+  vx:{...vx}, hum:{...hum},
   tracks:TRACKS.map(t=>({name:t.name,sound:t.sound,color:t.color,uid:t.uid||0})),
   inserts:inserts.map(l=>(l||[null,null]).map(x=>x?{id:x.id,params:{...x.params}}:null))}; }
 function applyProject(d){
@@ -2585,6 +2607,10 @@ function applyProject(d){
     while(inserts.length<TRACKS.length) inserts.push([null,null]);
     TRACKS.forEach((_,ti)=>rebuildInserts(ti));
     if(typeof buildInserts==='function'&&winIsOpen('lab')) buildInserts(); }
+  if(d.hum){ Object.assign(hum,d.hum);
+    document.querySelectorAll('[data-hum]').forEach(x=>x.classList.toggle('on',+x.dataset.hum===hum.dose));
+    [['humVel','vel'],['humTime','time'],['humGhost','ghost'],['humLive','live']].forEach(([id,k])=>{
+      const b=document.getElementById(id); if(b) b.classList.toggle('on',hum[k]); }); }
   if(d.vx){ Object.assign(vx,d.vx);
     [['vxOn','on'],['vxHP','hp'],['vxDS','ds'],['vxComp','comp'],['vxDbl','dbl'],['vxTune','tune']]
       .forEach(([id,k])=>{ const b=document.getElementById(id); if(b) b.classList.toggle('on',vx[k]); });
@@ -4682,6 +4708,75 @@ document.getElementById('spBands').addEventListener('click',function(){
   spBands=!spBands; this.classList.toggle('on',spBands); });
 document.getElementById('spReset').addEventListener('click',()=>{
   if(spPeaks) spPeaks.fill(0); toast('Cr\u00eates effac\u00e9es'); });
+
+/* ================== HUMANISATION ==================
+   Trois leviers : micro-décalages de timing (à la lecture), variations de vélocité
+   (écrites dans la grille) et notes fantômes discrètes ajoutées entre les coups. */
+const HUM_DOSES=[
+  {n:'l\u00e9ger', time:0.012, vel:0.10, ghost:0.05},
+  {n:'moyen', time:0.026, vel:0.18, ghost:0.11},
+  {n:'franc', time:0.045, vel:0.28, ghost:0.20},
+];
+const hum={dose:1, vel:true, time:true, ghost:false, live:false};
+let humOpen=false;
+document.getElementById('humanBtn').addEventListener('click',function(){
+  humOpen=!humOpen;
+  document.getElementById('humanpanel').style.display=humOpen?'flex':'none';
+  this.classList.toggle('on',humOpen);
+});
+document.querySelectorAll('[data-hum]').forEach(b=>{
+  b.addEventListener('click',()=>{ hum.dose=+b.dataset.hum;
+    document.querySelectorAll('[data-hum]').forEach(x=>x.classList.toggle('on',x===b)); });
+});
+[['humVel','vel'],['humTime','time'],['humGhost','ghost']].forEach(([id,k])=>{
+  document.getElementById(id).addEventListener('click',function(){
+    hum[k]=!hum[k]; this.classList.toggle('on',hum[k]); });
+});
+document.getElementById('humLive').addEventListener('click',function(){
+  hum.live=!hum.live; this.classList.toggle('on',hum.live);
+  toast(hum.live?'Humanisation continue : chaque tour de boucle est l\u00e9g\u00e8rement diff\u00e9rent'
+                :'Humanisation continue arr\u00eat\u00e9e');
+});
+/* décalage de timing calculé à la volée pour chaque frappe */
+function humTimeOffset(ti,step){
+  if(!hum.time || !(hum.live || humArmed)) return 0;
+  const d=HUM_DOSES[hum.dose].time;
+  /* les temps forts bougent moins que les contretemps : c'est ce qui sonne humain */
+  const strong = step%4===0 ? 0.35 : step%2===0 ? 0.7 : 1;
+  /* chaque piste a sa propre tendance : la caisse claire traîne, le hat pousse */
+  const bias = ti===1 ? 0.35 : ti===3 ? -0.25 : 0;
+  return ((Math.random()*2-1)*strong + bias) * d * stepDur() * 4;
+}
+let humArmed=false;
+/* écrit les variations de vélocité et les notes fantômes dans le pattern */
+function applyHumanize(){
+  pushUndo(true);
+  const D=HUM_DOSES[hum.dose], len=patLens[curPat], pat=patterns[curPat];
+  let changed=0;
+  TRACKS.forEach((trk,ti)=>{
+    for(let s=0;s<len;s++){
+      const lv=+pat[ti][s]||0;
+      if(lv && hum.vel){
+        /* on module le niveau autour de sa valeur, en gardant les accents accentués */
+        const r=Math.random();
+        let nv=lv;
+        if(r<D.vel){ nv=Math.max(1,lv-1); }
+        else if(r>1-D.vel*0.6){ nv=Math.min(3,lv+1); }
+        if(nv!==lv){ pat[ti][s]=nv; changed++; }
+      }
+      /* notes fantômes : coups très doux entre les frappes, surtout sur snare et hat */
+      if(!lv && hum.ghost && (ti===1||ti===3||ti===5)){
+        const off = s%4!==0;                       /* jamais sur le temps fort */
+        if(off && Math.random()<D.ghost){ pat[ti][s]=1; changed++; }
+      }
+    }
+  });
+  buildGrid(); scheduleAutosave();
+  humArmed=true;                                   /* le micro-timing devient actif */
+  toast(changed? changed+' coup'+(changed>1?'s':'')+' modifi\u00e9'+(changed>1?'s':'')
+        +' \u2014 \u21ba pour revenir' : 'Rien \u00e0 humaniser sur ce pattern');
+}
+document.getElementById('humApply').addEventListener('click',applyHumanize);
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);
