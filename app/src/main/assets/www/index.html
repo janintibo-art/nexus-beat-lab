@@ -197,7 +197,8 @@
   #labEqCv{display:block;width:100%;max-width:620px;height:150px;background:var(--inset);
     border:1px solid var(--line);border-radius:8px;}
   .labhint{font-size:11px;color:var(--dim);padding:10px 4px 0;line-height:1.5;}
-  #exprow,#exprow2{display:flex;gap:12px;align-items:stretch;}
+  #exprow,#exprow2,#exprow3{display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;}
+  #stemStatus{align-self:center;font-size:12px;color:var(--orange);font-weight:700;}
   #expStatus{align-self:center;font-size:12px;color:var(--orange);font-weight:700;}
   #inmeterwrap{display:flex;align-items:center;gap:10px;padding-bottom:12px;}
   .inlbl{font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--dim);}
@@ -559,11 +560,21 @@
   <div class="panel" style="padding:16px">
     <div class="ptitle" style="padding:0 0 8px">PROJET</div>
     <div id="exprow2">
-      <button class="btn" id="projSave">&#128190; EXPORTER LE PROJET (.json)</button>
-      <button class="btn" id="projLoad">&#128194; IMPORTER UN PROJET</button>
+      <button class="btn green" id="projZip">&#128230; PROJET COMPLET (.nexus)</button>
+      <button class="btn" id="projZipLoad">&#128194; OUVRIR UN .nexus</button>
+      <button class="btn" id="projSave">EXPORTER SANS AUDIO (.json)</button>
+      <button class="btn" id="projLoad">OUVRIR UN .json</button>
       <input type="file" id="projFile" accept=".json,application/json" style="display:none">
+      <input type="file" id="projZipFile" accept=".nexus,.zip,application/zip" style="display:none">
     </div>
-    <p class="labhint">Le fichier projet contient patterns, cha&icirc;ne, lignes de basse, r&eacute;glages sound lab et synth&eacute;. Partagez-le ou archivez-le : l'import le restaure &agrave; l'identique.</p>
+    <p class="labhint">Le <b>projet complet</b> embarque tout dans un seul fichier : patterns, r&eacute;glages, <b>et les samples audio</b> (pistes import&eacute;es, sample charg&eacute;, enregistrements micro). C'est le format &agrave; utiliser pour archiver ou partager une session enti&egrave;re.
+    Le .json reste utile pour transporter un arrangement l&eacute;ger sans l'audio.</p>
+    <div class="ptitle" style="padding:14px 0 8px">STEMS</div>
+    <div id="exprow3">
+      <button class="btn" id="expStems">&#127914; EXPORTER LES STEMS (.zip)</button>
+      <span id="stemStatus"></span>
+    </div>
+    <p class="labhint">Un fichier WAV par piste, aux m&ecirc;mes r&eacute;glages que le mix (EQ, pan, volume) &mdash; &agrave; ouvrir dans un DAW pour mixer ailleurs.</p>
   </div>
 </div>
 <div class="modwin" id="win-audio">
@@ -1981,6 +1992,83 @@ document.getElementById('expMid').addEventListener('click',async ()=>{
     'nexus-beat-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.mid');
 });
 
+/* ---------- projet complet .nexus (JSON + samples WAV) ---------- */
+document.getElementById('projZip').addEventListener('click',async ()=>{
+  const st=document.getElementById('expStatus');
+  st.textContent='Assemblage du projet\u2026';
+  try{
+    const files=[{name:'projet.json',
+      data:new TextEncoder().encode(JSON.stringify(projectData()))}];
+    /* pistes importées par l'utilisateur */
+    for(const t of TRACKS){ if(t.uid && userBufs[t.uid])
+      files.push({name:'samples/track_'+t.uid+'.wav',data:await bufToBytes(userBufs[t.uid])}); }
+    /* sample du slicer */
+    if(sampleBuf) files.push({name:'samples/slicer.wav',data:await bufToBytes(sampleBuf)});
+    /* pistes micro */
+    for(let i=0;i<audioTracks.length;i++){ if(audioTracks[i].buf)
+      files.push({name:'samples/audio_'+i+'.wav',data:await bufToBytes(audioTracks[i].buf)}); }
+    await saveBlob(zipStore(files),
+      'nexus-projet-'+new Date().toISOString().slice(0,10)+'.nexus');
+    st.textContent='';
+  }catch(e){ st.textContent=''; toast('Erreur : '+e); }
+});
+document.getElementById('projZipLoad').addEventListener('click',()=>
+  document.getElementById('projZipFile').click());
+document.getElementById('projZipFile').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const st=document.getElementById('expStatus');
+  st.textContent='Ouverture du projet\u2026';
+  try{
+    const entries=unzipStore(await f.arrayBuffer());
+    if(!entries['projet.json']) throw 'fichier projet introuvable dans l\u2019archive';
+    const data=JSON.parse(new TextDecoder().decode(entries['projet.json']));
+    /* audio d'abord, pour que les pistes retrouvent leur son */
+    userBufs={};
+    for(const name in entries){
+      if(!name.startsWith('samples/')) continue;
+      const buf=await AC.decodeAudioData(entries[name].buffer.slice(0));
+      const m=name.match(/track_(\d+)\.wav$/);
+      if(m){ userBufs[+m[1]]=buf; tidSeq=Math.max(tidSeq,+m[1]); continue; }
+      if(name.endsWith('slicer.wav')){ sampleBuf=buf; continue; }
+      const a=name.match(/audio_(\d+)\.wav$/);
+      if(a && audioTracks[+a[1]]) audioTracks[+a[1]].buf=buf;
+    }
+    applyProject(data);
+    drawWave(); buildSlices(); buildAudioUI();
+    st.textContent=''; toast('Projet complet ouvert (audio inclus)');
+  }catch(err){ st.textContent=''; toast('Archive illisible : '+err); }
+  e.target.value='';
+});
+/* ---------- export de stems (un WAV par piste) ---------- */
+document.getElementById('expStems').addEventListener('click',async ()=>{
+  const st=document.getElementById('stemStatus');
+  if(exporting) return; exporting=true;
+  try{
+    const seq = expSrc==='song' ? chain.slice() : [curPat];
+    let steps=0; for(let L=0;L<expLoops;L++) for(const p of seq) steps+=patLens[p];
+    const dur=steps*stepDur()+2.2;
+    const files=[];
+    const solo0=trackSolo.slice(), mute0=trackMute.slice();
+    for(let ti=0;ti<TRACKS.length;ti++){
+      st.textContent='Rendu piste '+(ti+1)+'/'+TRACKS.length+'\u2026';
+      await new Promise(r=>setTimeout(r,10));
+      for(let k=0;k<TRACKS.length;k++){ trackSolo[k]=(k===ti); trackMute[k]=false; }
+      const C=new OfflineAudioContext(2,Math.ceil(dur*44100),44100);
+      const nodes=buildOfflineChain(C);
+      scheduleOffline(nodes,seq,expLoops);
+      const buf=await C.startRendering();
+      files.push({name:sanitizeName(TRACKS[ti].name)+'.wav',data:await bufToBytes(buf)});
+    }
+    trackSolo.splice(0,trackSolo.length,...solo0);
+    trackMute.splice(0,trackMute.length,...mute0);
+    st.textContent='Assemblage de l\u2019archive\u2026';
+    await saveBlob(zipStore(files),
+      'nexus-stems-'+new Date().toISOString().slice(0,10)+'.zip');
+    st.textContent='';
+  }catch(e){ st.textContent=''; toast('Erreur stems : '+e.message); }
+  exporting=false;
+});
+
 /* ---------- projet : export / import JSON ---------- */
 function projectData(){ return {bpm,patterns,chain,curPat,patLens,bassLines,bassPrm,
   sndParams:sndParams.map(p=>({...p})),
@@ -3304,6 +3392,76 @@ document.getElementById('trkRen').addEventListener('click',()=>{
   pushUndo(true); TRACKS[selTrack].name=n.slice(0,10).toUpperCase();
   rebuildTrackUI(); scheduleAutosave();
 });
+
+/* ================== ZIP maison (stored, porté de Studio Tibo) ==================
+   Sert au format projet .nexus (JSON + samples WAV) et à l'export de stems. */
+const CRC_T=(()=>{
+  const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n;
+    for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);
+    t[n]=c; }
+  return t;
+})();
+function crc32(u8){
+  let c=0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++) c=CRC_T[(c^u8[i])&255]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+function zipStore(files){
+  const enc=new TextEncoder();
+  const parts=[], cd=[];
+  let off=0;
+  for(const f of files){
+    const nm=enc.encode(f.name), crc=crc32(f.data), sz=f.data.length;
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true);
+    lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true); lh.setUint16(8,0,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,sz,true); lh.setUint32(22,sz,true);
+    lh.setUint16(26,nm.length,true);
+    parts.push(new Uint8Array(lh.buffer),nm,f.data);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true);
+    ch.setUint16(4,20,true); ch.setUint16(6,20,true);
+    ch.setUint16(8,0x0800,true); ch.setUint16(10,0,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,sz,true); ch.setUint32(24,sz,true);
+    ch.setUint16(28,nm.length,true);
+    ch.setUint32(42,off,true);
+    cd.push(new Uint8Array(ch.buffer),nm);
+    off+=30+nm.length+sz;
+  }
+  const cdSize=cd.reduce((a,p)=>a+p.length,0);
+  const eo=new DataView(new ArrayBuffer(22));
+  eo.setUint32(0,0x06054b50,true);
+  eo.setUint16(8,files.length,true); eo.setUint16(10,files.length,true);
+  eo.setUint32(12,cdSize,true); eo.setUint32(16,off,true);
+  return new Blob([...parts,...cd,new Uint8Array(eo.buffer)],{type:'application/zip'});
+}
+function unzipStore(buf){
+  const dv=new DataView(buf), u8=new Uint8Array(buf), td=new TextDecoder();
+  let p=buf.byteLength-22;
+  while(p>=0&&dv.getUint32(p,true)!==0x06054b50) p--;
+  if(p<0) throw 'archive invalide';
+  const n=dv.getUint16(p+10,true);
+  let cd=dv.getUint32(p+16,true);
+  const out={};
+  for(let i=0;i<n;i++){
+    if(dv.getUint32(cd,true)!==0x02014b50) throw 'r\u00e9pertoire central invalide';
+    const method=dv.getUint16(cd+10,true);
+    const size=dv.getUint32(cd+20,true);
+    const nl=dv.getUint16(cd+28,true), el=dv.getUint16(cd+30,true), cl=dv.getUint16(cd+32,true);
+    const lho=dv.getUint32(cd+42,true);
+    const name=td.decode(u8.subarray(cd+46,cd+46+nl));
+    if(method!==0) throw 'archive compress\u00e9e non g\u00e9r\u00e9e';
+    const lnl=dv.getUint16(lho+26,true), lel=dv.getUint16(lho+28,true);
+    const start=lho+30+lnl+lel;
+    out[name]=u8.slice(start,start+size);
+    cd+=46+nl+el+cl;
+  }
+  return out;
+}
+const sanitizeName=s=>s.replace(/[^\w\u00C0-\u00ff .-]+/g,'_').slice(0,40)||'piste';
+/* buffer audio → octets WAV (réutilise l'encodeur d'export) */
+async function bufToBytes(b){ return new Uint8Array(await bufToWav(b).arrayBuffer()); }
 
 /* ---------- vumètre ---------- */
 [['vuL'],['vuR']].forEach(([id])=>{ const row=document.getElementById(id);

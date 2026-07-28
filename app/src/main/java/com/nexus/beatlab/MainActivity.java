@@ -149,7 +149,8 @@ public class MainActivity extends Activity {
                     cv.put(MediaStore.Downloads.MIME_TYPE,
                             expName.endsWith(".wav") ? "audio/wav"
                           : expName.endsWith(".mid") ? "audio/midi"
-                          : "application/json");
+                          : expName.endsWith(".json") ? "application/json"
+                          : "application/zip");
                     Uri uri = getContentResolver()
                             .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
                     OutputStream os = getContentResolver().openOutputStream(uri);
@@ -226,7 +227,9 @@ public class MainActivity extends Activity {
                 try {
                     Intent i = new Intent(Intent.ACTION_GET_CONTENT);
                     i.addCategory(Intent.CATEGORY_OPENABLE);
-                    i.setType("audio/*");
+                    i.setType("*/*");
+                    i.putExtra(Intent.EXTRA_MIME_TYPES,
+                            new String[]{"audio/*","application/zip","application/json","application/octet-stream"});
                     startActivityForResult(Intent.createChooser(i, "Choisir un sample"), FILE_REQUEST);
                 } catch (Exception e) {
                     fileCallback = null;
