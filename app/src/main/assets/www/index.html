@@ -6,9 +6,9 @@
 <title>NEXUS Beat Lab</title>
 <style>
   :root{
-    --bg:#0b0b0f; --panel:#17171d; --panel2:#121218; --line:#2c2c37; --line-soft:#22222b;
-    --inset:#08080b;
-    --txt:#ececf3; --dim:#8e8ea0;
+    --bg:#06060a; --panel:#1c1c25; --panel2:#15151c; --line:#3a3a49; --line-soft:#2a2a36;
+    --inset:#050508;
+    --txt:#f6f6fb; --dim:#a4a4ba;
     --orange:#ff9a2e; --pink:#ff2e88; --purple:#a04dff; --cyan:#2ee6ff;
     --green:#39d98a; --red:#ff3b30; --amber-soft:rgba(255,154,46,.13);
     --r:12px;                       /* rayon commun */
@@ -30,10 +30,10 @@
   body{width:1180px;padding:8px;padding-bottom:24px;}
 
   /* ---------- panneaux ---------- */
-  .panel{background:linear-gradient(178deg,#1b1b22,#141419);border:1px solid var(--line);
+  .panel{background:linear-gradient(178deg,#20202a,#16161d);border:1px solid var(--line);
     border-radius:var(--r);
-    box-shadow:0 1px 0 rgba(255,255,255,.045) inset, 0 6px 20px -8px rgba(0,0,0,.8);}
-  .ptitle{font-size:11px;font-weight:800;letter-spacing:2px;color:var(--dim);
+    box-shadow:0 1px 0 rgba(255,255,255,.07) inset, 0 8px 24px -10px #000;}
+  .ptitle{font-size:11px;font-weight:800;letter-spacing:2px;color:#c2c2d6;
     text-transform:uppercase;padding:11px 14px 5px;}
   .fold{cursor:pointer;user-select:none;display:flex;align-items:center;gap:7px;
     transition:color .13s var(--ease);}
@@ -47,12 +47,12 @@
   /* ---------- boutons en relief ---------- */
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
     min-height:var(--tap);
-    background:linear-gradient(180deg,#2e2e38,#1e1e26);border:1px solid #3a3a47;border-radius:10px;
-    color:var(--txt);font-size:12px;font-weight:700;letter-spacing:.7px;padding:0 15px;cursor:pointer;
-    box-shadow:0 2px 5px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.09);
+    background:linear-gradient(180deg,#353542,#22222c);border:1px solid #4a4a5c;border-radius:10px;
+    color:var(--txt);font-size:12px;font-weight:800;letter-spacing:.7px;padding:0 15px;cursor:pointer;
+    box-shadow:0 2px 6px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.13);
     transition:background .13s var(--ease), box-shadow .13s var(--ease),
                transform .09s var(--ease), color .13s var(--ease);}
-  .btn:hover{background:linear-gradient(180deg,#36364250,#24242e);border-color:#484857;}
+  .btn:hover{background:linear-gradient(180deg,#3f3f4e,#2a2a36);border-color:#5c5c72;}
   .btn:active{transform:translateY(1px) scale(.985);
     box-shadow:0 1px 2px rgba(0,0,0,.6), inset 0 2px 6px rgba(0,0,0,.55);}
   .btn:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;}
@@ -87,22 +87,41 @@
   .vurow i.r{background:var(--red);box-shadow:0 0 5px var(--red);}
 
   /* ---------- potentiomètres ---------- */
-  .knob{display:flex;flex-direction:column;align-items:center;gap:4px;width:68px;}
-  .kbody{width:46px;height:46px;border-radius:50%;position:relative;cursor:ns-resize;touch-action:none;
-    background:radial-gradient(circle at 34% 28%,#41414d,#16161b 72%);
-    border:2px solid #07070a;
-    box-shadow:0 3px 7px rgba(0,0,0,.7), inset 0 2px 3px rgba(255,255,255,.13),
-               inset 0 -3px 5px rgba(0,0,0,.6);
-    transition:box-shadow .12s var(--ease);}
-  .kbody:active{box-shadow:0 0 14px -1px var(--kc,var(--orange)),
-    inset 0 2px 3px rgba(255,255,255,.13), inset 0 -3px 5px rgba(0,0,0,.6);}
-  .kbody::after{content:'';position:absolute;left:50%;top:4px;width:3.5px;height:13px;border-radius:2px;
-    background:var(--kc,var(--orange));box-shadow:0 0 8px var(--kc,var(--orange));
-    transform-origin:50% 19px;transform:translateX(-50%) rotate(var(--rot,0deg));
+  .knob{display:flex;flex-direction:column;align-items:center;gap:3px;width:72px;}
+  /* anneau extérieur : arc de progression = valeur lisible d'un coup d'oeil */
+  .kbody{width:56px;height:56px;border-radius:50%;position:relative;cursor:grab;touch-action:none;
+    padding:6px;
+    background:
+      conic-gradient(from 225deg,
+        var(--kc,var(--orange)) 0deg var(--fill,0deg),
+        #2a2a34 var(--fill,0deg) 270deg,
+        transparent 270deg 360deg);
+    box-shadow:0 3px 8px rgba(0,0,0,.75);
+    transition:filter .12s var(--ease), transform .1s var(--ease);}
+  .kbody::before{content:'';position:absolute;inset:6px;border-radius:50%;
+    background:radial-gradient(circle at 34% 26%,#4a4a58,#15151b 74%);
+    border:1px solid #050508;
+    box-shadow:inset 0 2px 4px rgba(255,255,255,.16), inset 0 -4px 7px rgba(0,0,0,.75),
+               0 1px 2px rgba(0,0,0,.6);}
+  .kbody.grabbing{cursor:grabbing;transform:scale(1.06);
+    filter:drop-shadow(0 0 10px var(--kc,var(--orange)));}
+  .kbody::after{content:'';position:absolute;left:50%;top:11px;width:4px;height:15px;border-radius:2px;
+    background:#fff;box-shadow:0 0 7px var(--kc,var(--orange));z-index:2;
+    transform-origin:50% 17px;transform:translateX(-50%) rotate(var(--rot,0deg));
     transition:transform .05s linear;}
-  .knob label{font-size:8.5px;font-weight:700;letter-spacing:.9px;color:var(--dim);text-align:center;
+  .knob label{font-size:8.5px;font-weight:800;letter-spacing:.9px;color:#a8a8bd;text-align:center;
     line-height:1.2;text-transform:uppercase;}
-  .knob .kv{font-size:10px;color:var(--txt);font-weight:700;font-variant-numeric:tabular-nums;}
+  .knob .kv{font-size:11px;color:#fff;font-weight:800;font-variant-numeric:tabular-nums;}
+  /* bulle de valeur suivant le doigt */
+  #knobBubble{position:fixed;z-index:90;pointer-events:none;transform:translate(-50%,0) scale(.9);
+    background:rgba(20,20,26,.97);border:1px solid var(--line);border-radius:10px;
+    padding:7px 14px;text-align:center;opacity:0;
+    transition:opacity .12s var(--ease), transform .12s var(--ease);
+    box-shadow:0 10px 26px -8px rgba(0,0,0,.95);}
+  #knobBubble.show{opacity:1;transform:translate(-50%,0) scale(1);}
+  #knobBubble b{display:block;font-size:19px;color:#fff;font-variant-numeric:tabular-nums;line-height:1.1;}
+  #knobBubble span{display:block;font-size:8.5px;letter-spacing:1.2px;color:var(--dim);
+    text-transform:uppercase;margin-top:2px;}
 
   /* ---------- disposition principale ---------- */
   #main{display:grid;grid-template-columns:352px 1fr;gap:var(--gap);}
@@ -134,22 +153,22 @@
   .mdot{width:14px;height:14px;border-radius:50%;background:#232329;border:1px solid #34343f;cursor:pointer;
     box-shadow:inset 0 2px 3px rgba(0,0,0,.6);}
   .mdot.muted{background:var(--red);box-shadow:0 0 7px var(--red);}
-  .step{height:36px;border-radius:6px;background:linear-gradient(180deg,#31313d,#24242e);
-    border:1px solid #464654;cursor:pointer;
-    box-shadow:inset 0 2px 3px rgba(0,0,0,.4);
+  .step{height:36px;border-radius:6px;background:linear-gradient(180deg,#2a2a36,#1b1b24);
+    border:1px solid #4e4e62;cursor:pointer;
+    box-shadow:inset 0 2px 4px rgba(0,0,0,.6);
     transition:transform .07s var(--ease), box-shadow .1s var(--ease), background .1s var(--ease);
     will-change:transform;}
   .step:active{transform:scale(.93);}
-  .step.q{background:linear-gradient(180deg,#3c3c4b,#2c2c39);border-color:#545464;}
+  .step.q{background:linear-gradient(180deg,#37374a,#25252f);border-color:#5e5e76;}
   .step.on{background:linear-gradient(180deg,var(--sc),color-mix(in srgb,var(--sc) 55%,#000));
     border-color:color-mix(in srgb,var(--sc) 70%,#fff);
     box-shadow:0 0 10px color-mix(in srgb,var(--sc) 60%,transparent), inset 0 1px 0 rgba(255,255,255,.4);}
-  .step.v1{opacity:.45;box-shadow:none;}
-  .step.v2{opacity:.8;}
+  .step.v1{filter:brightness(.62) saturate(.85);box-shadow:none;}
+  .step.v2{filter:brightness(.88);}
   .step.v3{box-shadow:0 0 16px color-mix(in srgb,var(--sc) 85%,transparent), inset 0 1px 0 rgba(255,255,255,.7);
     border-color:#fff;}
-  .colhead{font-size:10px;text-align:center;color:var(--dim);font-weight:700;padding-bottom:2px;}
-  .colhead.beat{color:var(--txt);}
+  .colhead{font-size:10px;text-align:center;color:#8a8aa0;font-weight:700;padding-bottom:2px;}
+  .colhead.beat{color:#fff;font-weight:800;}
   .playcol{outline:2px solid var(--orange);outline-offset:1px;border-radius:7px;
     background-color:var(--amber-soft);}
   .colhead.playcol{outline:none;color:var(--orange);text-shadow:0 0 8px var(--orange);}
@@ -238,7 +257,7 @@
 
   .prsel{background:var(--inset);color:var(--txt);border:1px solid var(--line);border-radius:8px;
     padding:8px 10px;font-size:11px;font-weight:700;box-shadow:inset 0 2px 5px rgba(0,0,0,.6);}
-  .prcell.outscale{opacity:.42;}
+  .prcell.outscale{filter:brightness(.55);}
   .prcell.root{background:#2a2a38;border-color:#4d4d63;}
   .prkey.inscale{box-shadow:inset 3px 0 0 var(--cyan);}
   #prkeys{display:grid;grid-auto-rows:21px;width:52px;gap:1px;}
@@ -246,9 +265,9 @@
     background:#dfdfe6;color:#222;border-radius:3px 0 0 3px;}
   .prkey.blk{background:#33333d;color:#9a9ab0;}
   #prgrid{flex:1;display:grid;grid-auto-rows:21px;gap:1px;}
-  .prcell{background:#1e1e26;border-radius:3px;cursor:pointer;border:1px solid #2b2b34;
+  .prcell{background:#191921;border-radius:3px;cursor:pointer;border:1px solid #33333f;
     transition:background .08s var(--ease);}
-  .prcell.q{background:#262631;}
+  .prcell.q{background:#24242f;}
   .prcell:active{background:#3a3a4a;}
   .prcell.blkrow{filter:brightness(.82);}
   .prcell.on{background:linear-gradient(180deg,var(--cyan),#0f8ba0);border-color:#8ff0ff;box-shadow:0 0 8px rgba(46,230,255,.45);}
@@ -922,7 +941,8 @@
   <p>NEXUS Beat Lab v2.3 &mdash; studio : pads, 7 kits, sampler-slicer, s&eacute;quenceur 8/16/32 pas, 8 patterns + mode SONG, enregistrement live, FX master.<br><br>
   Modules : PIANO ROLL (synth&eacute; bass), EQUALIZER 3 bandes, SOUND LAB (pitch, filtre, decay, volume par piste).<br><br>
   Votre travail est sauvegard&eacute; automatiquement et restaur&eacute; au prochain lancement. &#8630; annule les 25 derni&egrave;res actions.<br><br>
-  Astuces : glissez sur la grille pour remplir plusieurs pas d'un geste &middot; touchez le titre d'un panneau pour le replier &middot; pincez &agrave; deux doigts pour zoomer.</p>
+  Astuces : glissez sur la grille pour remplir plusieurs pas d'un geste &middot; touchez le titre d'un panneau pour le replier &middot; pincez &agrave; deux doigts pour zoomer.<br><br>
+  <b>Potentiom&egrave;tres</b> : glissez dans n'importe quel sens pour r&eacute;gler &middot; &eacute;cartez le doigt sur le c&ocirc;t&eacute; sans rel&acirc;cher pour un r&eacute;glage pr&eacute;cis &middot; deux appuis rapides remettent la valeur d'origine.</p>
 </div>
 <div id="welcome">
   <div id="welbox" class="panel">
@@ -1606,17 +1626,63 @@ document.getElementById('tapBtn').addEventListener('click',()=>{
 });
 
 /* ---------- potentiomètres génériques ---------- */
+/* bulle de valeur partagée, affichée au-dessus du doigt pendant le réglage */
+const knobBubble=(()=>{ const d=document.createElement('div'); d.id='knobBubble';
+  document.body.appendChild(d); return d; })();
 function makeKnob(el,valEl,init,onChange,fmt){
   let v=init;
-  function render(){ el.style.setProperty('--rot',(v*270-135)+'deg'); valEl.textContent=fmt(v); onChange(v); }
-  let y0=0,v0=0;
-  el.addEventListener('pointerdown',e=>{ e.preventDefault(); y0=e.clientY;v0=v; el.setPointerCapture(e.pointerId); });
-  el.addEventListener('pointermove',e=>{ if(!e.buttons) return;
-    v=Math.min(1,Math.max(0,v0+(y0-e.clientY)/150)); render(); });
-  el.addEventListener('dblclick',()=>{ v=init; render(); });
+  function render(){
+    el.style.setProperty('--rot',(v*270-135)+'deg');
+    el.style.setProperty('--fill',(v*270)+'deg');     /* arc de progression */
+    valEl.textContent=fmt(v);
+    onChange(v);
+  }
+  let lx=0,ly=0,moved=false,tLast=0;
+  el.addEventListener('pointerdown',e=>{
+    e.preventDefault(); e.stopPropagation();
+    /* deux appuis rapprochés = retour à la valeur d'origine */
+    const now=performance.now();
+    if(now-tLast<330){ v=init; render(); buzz(14); tLast=0; hideBubble(); return; }
+    tLast=now;
+    lx=e.clientX; ly=e.clientY; moved=false;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('grabbing');
+    showBubble(e.clientX,e.clientY);
+  });
+  el.addEventListener('pointermove',e=>{
+    if(!e.buttons) return;
+    /* calcul incrémental : jamais de saut, quel que soit le trajet du doigt */
+    const dx=e.clientX-lx, dy=ly-e.clientY;
+    lx=e.clientX; ly=e.clientY;
+    const r=el.getBoundingClientRect();
+    const offX=Math.abs(e.clientX-(r.x+r.width/2));
+    /* écarté sur le côté : mode précision, seul le mouvement vertical compte
+       (le trajet d'approche n'altère donc plus la valeur) ;
+       près du potard : glisser vers le haut ou vers la droite augmente. */
+    const far = offX>100;
+    const stepPx = far ? dy : (Math.abs(dx)>Math.abs(dy) ? dx : dy);
+    const fine = far ? (offX>210 ? 0.15 : 0.38) : 1;
+    v=Math.min(1,Math.max(0,v+stepPx*fine/150));
+    moved=true; render(); showBubble(e.clientX,e.clientY);
+  });
+  function end(){ el.classList.remove('grabbing'); hideBubble();
+    if(moved) scheduleAutosave(); }
+  el.addEventListener('pointerup',end);
+  el.addEventListener('pointercancel',end);
+  el.addEventListener('dblclick',e=>{ e.preventDefault(); v=init; render(); });
+  function showBubble(x,y){
+    const lbl=el.parentElement&&el.parentElement.querySelector('label');
+    knobBubble.innerHTML='<b>'+fmt(v)+'</b>'+(lbl?'<span>'+lbl.textContent+'</span>':'');
+    knobBubble.style.left=x+'px';
+    knobBubble.style.top=(y-62)+'px';
+    knobBubble.classList.add('show');
+  }
   render();
   return { set(nv){ v=Math.min(1,Math.max(0,nv)); render(); } };
 }
+let _bubT=null;
+function hideBubble(){ clearTimeout(_bubT);
+  _bubT=setTimeout(()=>knobBubble.classList.remove('show'),260); }
 makeKnob(document.getElementById('masterKnob'),document.getElementById('masterVal'),
   0.8,v=>outGain.gain.value=v,v=>Math.round(v*100));
 const kSwing=makeKnob(document.getElementById('swingKnob'),document.getElementById('swingVal'),
